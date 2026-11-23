@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+.coverage
+htmlcov/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local secrets
+.env
+.env.*
+
+# Scratch output and experiment artefacts
+shots/
+tmp/
+runs/
+runs_smoke/
+results/
+logs/
+
+# Sky Team: finished scenarios, local to whoever runs the server
+progress.json

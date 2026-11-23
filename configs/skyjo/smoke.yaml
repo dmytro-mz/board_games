@@ -1,0 +1,13 @@
+# ~1 minute end-to-end check of the training pipeline.
+name: smoke
+ppo:
+  total_timesteps: 200_000
+  num_envs: 32
+  num_steps: 64
+  num_workers: 4
+eval:
+  every_updates: 40
+  games: 100
+  workers: 4
+snapshot_every_updates: 20
+save_every_updates: 50

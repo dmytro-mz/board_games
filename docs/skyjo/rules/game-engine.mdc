@@ -1,0 +1,23 @@
+---
+description: Invariants of the Skyjo rules engine and action space
+globs: src/skyjo/game/**,tests/skyjo/test_engine.py
+alwaysApply: false
+---
+
+# Game engine invariants (see docs/rules.md for the full rules)
+
+- Deck: 150 cards (-2×5, -1×10, 0×15, 1..12×10). Card conservation:
+  `non-removed board cards + deck + discard + hand == 150` (removed columns go to discard).
+- Grid positions are column-major: column c = slots `3c, 3c+1, 3c+2`.
+- Board views use sentinels `HIDDEN = 13`, `REMOVED = 14`; `value - MIN_VALUE` is a dense
+  code 0..16. Use `is_visible()`, never compare against literals.
+- Action ids (26): `0..11` replace slot, `12..23` flip slot, `24` draw deck, `25` take discard.
+  Changing this breaks every trained policy (their output layer is indexed by action id).
+- Phases: SETUP → CHOOSE_SOURCE → (PLACE_DRAWN | PLACE_DISCARD) → next player.
+  Taking the discard forces a replace; a drawn card may be discarded + one flip.
+- Column clear happens after every placement/flip AND at the final reveal; the swapped
+  card is discarded before the triplet.
+- Finisher's positive score doubles unless strictly lowest (ties double, `double_on_tie`).
+- `Observation` is the only thing agents see — never leak hidden values into it.
+- Every rules change needs a deterministic test (rig `Board`s, call `Round._finish()`)
+  plus the random-game fuzz test must still pass.

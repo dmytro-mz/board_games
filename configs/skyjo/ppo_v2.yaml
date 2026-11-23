@@ -1,0 +1,45 @@
+# Experiment 2 vs ppo_baseline: relational obs features (v2), wider net, 2x steps,
+# more weight on the strongest heuristic.
+name: ppo_v2
+seed: 0
+device: cpu
+torch_threads: 4
+snapshot_every_updates: 10
+save_every_updates: 50
+
+env:
+  n_players: 2
+  episode: round
+  reward: relative
+  reward_scale: 10.0
+  opponents:
+    greedy: 0.10
+    ev: 0.50
+    self: 0.40
+  max_snapshots: 20
+  obs_version: 2
+
+ppo:
+  total_timesteps: 60_000_000
+  num_envs: 128
+  num_steps: 128
+  num_workers: 8
+  learning_rate: 2.5e-4
+  anneal_lr: true
+  gamma: 0.995
+  gae_lambda: 0.95
+  num_minibatches: 8
+  update_epochs: 4
+  clip_coef: 0.2
+  ent_coef: 0.01
+  ent_coef_final: 0.001
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  hidden: [512, 256]
+
+eval:
+  every_updates: 25
+  games: 400
+  opponents: [random, greedy, ev]
+  workers: 8
+  best_metric_opponent: ev

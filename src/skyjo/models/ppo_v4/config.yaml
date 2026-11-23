@@ -1,0 +1,64 @@
+name: ppo_v4
+seed: 0
+device: cpu
+torch_threads: 4
+snapshot_every_updates: 10
+save_every_updates: 25
+run_root: runs
+init_checkpoint: runs/20261105-171256_ppo_v3/checkpoints/latest.pt
+env:
+  n_players: 2
+  table_sizes:
+    2: 0.3
+    3: 0.15
+    4: 0.15
+    5: 0.1
+    6: 0.1
+    7: 0.1
+    8: 0.1
+  episode: game
+  reward: relative
+  reward_scale: 10.0
+  win_bonus: 1.0
+  opponents:
+    expert: 0.8
+    self: 0.2
+  max_snapshots: 20
+  obs_version: 4
+ppo:
+  total_timesteps: 20000000
+  num_envs: 160
+  num_steps: 128
+  num_workers: 10
+  learning_rate: 0.0001
+  anneal_lr: true
+  gamma: 0.997
+  gae_lambda: 0.95
+  num_minibatches: 8
+  update_epochs: 4
+  clip_coef: 0.2
+  clip_vloss: true
+  ent_coef: 0.001
+  ent_coef_final: 0.0005
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  target_kl: null
+  hidden:
+  - 512
+  - 256
+  residual_prior: true
+  prior_scale: 20.0
+  critic_warmup_updates: 10
+eval:
+  every_updates: 30
+  games: 400
+  opponents:
+  - expert
+  workers: 10
+  best_metric_opponent: expert
+  table_sizes:
+  - 2
+  - 4
+  - 6
+  - 8
+  best_metric: eval/expert/mean_win_vs_fair

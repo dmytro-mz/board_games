@@ -1,0 +1,46 @@
+---
+description: Phase 10 project map, layering and day-to-day commands
+alwaysApply: true
+---
+
+# Phase 10 — project map
+
+Goal: an online Phase 10 for friends — the complete game, a hand the player arranges and builds groups from
+by themselves (the game never suggests combinations), bots good enough to fill empty seats, and a table that
+works in any window size.
+
+## Layout and dependency direction (never import "upwards")
+
+```
+phase10/game/      rules engine, pure Python, no I/O                  (lowest layer)
+  model.py         Card, deck, Req, PHASES
+  rules.py         group validation (set_value / run_lows / color_of) and Group (build, ends_for, add)
+  actions.py       action dataclasses + JSON protocol
+  engine.py        Game state machine: Game.play(seat, action) -> events, Game.view(seat), Game.arrange
+phase10/bots/      Bot ABC · solver.py (deficit of a hand for a phase, lay-down plan) · planner.py · registry
+phase10/runner.py  play_game(bots, seed, rules)
+phase10/web/       room.py (sync table logic, no I/O) · server.py (FastAPI + WebSocket)
+                   static/ (vanilla ES-module client, no build step)
+phase10/cli.py     typer CLI (entry point `phase10`)
+scripts/           demo / shot / sizes / ui_check (visual + browser checks)
+```
+
+## Commands (always via uv, never pip; in the sandbox `export UV_CACHE_DIR=.uv-cache`)
+
+- Tests: `uv run pytest` (must pass before you say you're done)
+- Lint/format: `uv run ruff check --fix src tests scripts && uv run ruff format src tests scripts`
+- Play: `uv run bg serve` (LAN) · `uv run bg serve --tunnel` (public link via cloudflared)
+- Bot strength: `uv run bg phase10 eval -a pro,regular,rookie -n 300`
+- See the UI: `uv run python scripts/phase10/demo.py --stage home|lobby|play|drawn|laid|handover|over --out shots/x.png`
+- Click through a whole game in Chrome: `uv run python scripts/phase10/ui_check.py [--size WxH] [--phases N]`
+- Every screen at phone → 1920 sizes: `uv run python scripts/phase10/sizes.py` (fails on any overflow; shots in `shots/sizes/`)
+
+## Working agreements
+
+- The server is authoritative; clients only send intents. Never trust client input.
+- No assistance: the engine and the client never group, suggest or auto-complete combinations. The client only
+  validates what the player staged (mirroring `rules.py` messages) and asks when a choice is ambiguous.
+- Hands are never sorted by the game; new cards go to the end. Only the player reorders (`arrange`).
+- Any rules change goes in `game/` with a test in `tests/phase10/test_engine.py`; keep `cards.js` validation in sync.
+- UI changes: render with `scripts/phase10/demo.py`, look at the screenshot, run `scripts/phase10/ui_check.py` and `scripts/phase10/sizes.py`.
+- `shots/` and `tmp/` are scratch output (gitignored).

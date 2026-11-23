@@ -1,0 +1,29 @@
+---
+description: Web server, room protocol and the vanilla JS card-table client
+globs: src/phase10/web/**,tests/phase10/test_web.py,scripts/phase10/demo.py,scripts/phase10/ui_check.py,scripts/phase10/sizes.py
+alwaysApply: false
+---
+
+# Web
+
+## Server / room
+
+- `Room` is synchronous table logic with no I/O; `server.py` only moves JSON over WebSockets.
+- Every change is broadcast as a full per-viewer snapshot (`Room.state_for`) with the engine events for
+  animations. Only your own hand is sent; `_filter_event` blanks the card of other players' deck draws.
+- `options` is sent only to the current, non-autoplay player. `arrange` answers only the sender (same `seq`).
+- Bots, timeouts, autopilot and dealing the next hand run from `Room.plan()` → `(delay, step)`, driven by
+  `Room.drive()`. Between hands the room waits for every connected human to press Ready (no forced deal, no timeout).
+
+## Client (`static/`, no build step, no frameworks)
+
+- `dom.js` `h()` builds DOM and skips `null` children — native `replaceChildren` / `append` don't.
+- `cards.js` CSS cards sized by `--cw` (everything inside is in `em`), plus a mirror of the group rules with
+  the same messages as `rules.py`.
+- `hand.js` the hand: click selects, pointer drag reorders (FLIP) or drops on `[data-drop]` targets
+  (`discard`, `group:ID`, `slot:I`). Move/up listeners live on `window` because reordering moves the element.
+- `app.js` home, lobby, table (opponents · piles · my phase zone with staging slots · dock with status, actions,
+  hand), popovers, dialogs, hand-over and game-over modals. Staged groups live only in the client until the
+  phase is laid down. `sound.js` synthesised effects.
+- Layout: short (≤760px high) or narrow (≤760px wide) windows put the piles beside the phase zone; ≤1100px the
+  side panel becomes a slide-over; ≤520px opponents become one row each. Check with `scripts/phase10/sizes.py`.

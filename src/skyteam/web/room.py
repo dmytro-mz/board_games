@@ -1,0 +1,255 @@
+"""A table: two seats (Pilot, Co-Pilot), a lobby with scenario choice, and one running game."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from typing import Any
+
+from skyteam.game.engine import SEATS, Game, IllegalMove
+from skyteam.game.scenarios import ABILITIES, BY_ID, SCENARIOS
+from skyteam.progress import Progress
+
+REALTIME_SECONDS = 60
+log = logging.getLogger("skyteam.web")
+
+
+class RoomError(Exception):
+    pass
+
+
+class Member:
+    def __init__(self, member_id: str, name: str) -> None:
+        self.id = member_id
+        self.token = member_id  # members are keyed by their token
+        self.name = name
+        self.conns: list[Any] = []
+
+    @property
+    def online(self) -> bool:
+        return bool(self.conns)
+
+
+class Room:
+    def __init__(self, code: str, progress: Progress) -> None:
+        self.id = code
+        self.progress = progress
+        self.members: dict[str, Member] = {}
+        self.host_id: str | None = None
+        self.closed = False
+        self.scenario = SCENARIOS[0].id
+        self.abilities: list[str] = []
+        self.seats: dict[str, str | None] = dict.fromkeys(SEATS)
+        self.game: Game | None = None
+        self.recorded = False
+        self.touched = time.monotonic()
+        self.deadline: float | None = None
+
+    # ------------------------------------------------------------- membership
+    @property
+    def idle_for(self) -> float:
+        if any(m.online for m in self.members.values()):
+            return 0.0
+        return time.monotonic() - self.touched
+
+    def join(self, token: str, name: Any, origin: str = "") -> Member:
+        label = (str(name).strip()[:20] if name else "") or f"Pilot {len(self.members) + 1}"
+        member = self.members.get(token)
+        if member is None:
+            member = self.members[token] = Member(token, label)
+            if self.host_id is None:
+                self.host_id = token
+            log.info("table %s: %s joined%s", self.id, label, " as host" if self.host_id == token else "")
+        else:
+            member.name = label
+        return member
+
+    def connect(self, conn: Any) -> None:
+        self.members[conn.member_id].conns.append(conn)
+        self.broadcast()
+
+    def disconnect(self, conn: Any) -> None:
+        m = self.members.get(conn.member_id)
+        if m and conn in m.conns:
+            m.conns.remove(conn)
+        self.touched = time.monotonic()
+        self.broadcast()
+
+    @property
+    def listeners(self) -> list[Any]:
+        return [c for m in self.members.values() for c in m.conns]
+
+    @property
+    def status(self) -> str:
+        return "lobby" if self.game is None else ("over" if self.game.result else "playing")
+
+    def set_host(self, member_id: str) -> None:
+        """The platform decides who hosts this table: always the party leader."""
+        if member_id in self.members and member_id != self.host_id:
+            self.host_id = member_id
+            self.broadcast()
+
+    async def drive(self) -> None:
+        """Real-time scenarios: run out the clock even when nobody sends anything."""
+        while not self.closed:
+            await asyncio.sleep(0.5)
+            self.tick()
+
+    def close(self) -> None:
+        self.closed = True
+
+    def describe(self) -> str:
+        return f"{self.id} · {self.scenario} · {sum(m.online for m in self.members.values())} online"
+
+    # ------------------------------------------------------------- state
+    def seat_of(self, member_id: str) -> str:
+        mine = [s for s in SEATS if self.seats[s] == member_id]
+        return mine[0] if mine else "spectator"
+
+    def snapshot(self, member_id: str) -> dict[str, Any]:
+        view = self.seat_of(member_id)
+        base: dict[str, Any] = {
+            "type": "state",
+            "room": self.id,
+            "you": member_id,
+            "isHost": member_id == self.host_id,
+            "scenario": self.scenario,
+            "abilities": self.abilities,
+            "abilityCatalog": {k: {"name": v[0], "text": v[1]} for k, v in ABILITIES.items()},
+            "seats": {s: self._seat_public(self.seats[s]) for s in SEATS},
+            "mySeats": [s for s in SEATS if self.seats[s] == member_id],
+            "status": self.status,
+            "progress": self.progress.finished(),
+            "now": int(time.time() * 1000),
+        }
+        if self.game is not None:
+            base["game"] = self.game.view(view)
+        return base
+
+    def _seat_public(self, member_id: str | None) -> dict[str, Any] | None:
+        m = self.members.get(member_id or "")
+        return {"name": m.name, "online": m.online} if m else None
+
+    def broadcast(self) -> None:
+        for m in self.members.values():
+            snap = self.snapshot(m.id)
+            for conn in m.conns:
+                conn.send(snap)
+
+    # ------------------------------------------------------------- messages
+    def handle(self, member_id: str, msg: dict[str, Any]) -> None:
+        self.touched = time.monotonic()
+        kind = msg.get("type")
+        host = member_id == self.host_id
+        if kind == "name":
+            self.members[member_id].name = (str(msg.get("name", "")).strip()[:20]) or self.members[member_id].name
+        elif kind == "scenario":
+            self._need_lobby(host)
+            if msg.get("id") not in BY_ID:
+                raise RoomError("Unknown scenario")
+            self.scenario = msg["id"]
+            self.abilities = self.abilities[: BY_ID[self.scenario].abilities]
+        elif kind == "abilities":
+            self._need_lobby(host)
+            picked = [a for a in dict.fromkeys(msg.get("keys", [])) if a in ABILITIES]
+            if len(picked) > BY_ID[self.scenario].abilities:
+                raise RoomError("That scenario uses fewer Special Ability cards")
+            self.abilities = picked
+        elif kind == "claim":
+            self._need_lobby(True)
+            seat = msg.get("seat")
+            if seat not in SEATS:
+                raise RoomError("Can't take that seat")
+            if self.seats[seat] not in (None, member_id):
+                raise RoomError("That seat is taken")
+            for s in SEATS:
+                if self.seats[s] == member_id:
+                    self.seats[s] = None
+            self.seats[seat] = member_id
+        elif kind == "leave":
+            self._need_lobby(True)
+            for s in SEATS:
+                if self.seats[s] == member_id:
+                    self.seats[s] = None
+        elif kind == "start":
+            self._need_lobby(host)
+            if any(self.seats[s] is None for s in SEATS):
+                raise RoomError("Both the Pilot and the Co-Pilot seat need a player")
+            self.game = Game(self.scenario, abilities=self.abilities)
+            names = {s: self.members[m].name for s, m in self.seats.items() if m}
+            log.info(
+                "table %s takes off for %s: %s (Pilot) and %s (Co-Pilot)",
+                self.id,
+                self.scenario,
+                names["pilot"],
+                names["copilot"],
+            )
+            self.recorded = False
+            self.deadline = None
+        elif kind == "lobby":
+            if not host and member_id not in self.seats.values():
+                raise RoomError("Only the pilots can do that")
+            if self.game is not None and self.game.result is None:
+                log.info("table %s abandons %s and returns to the lobby", self.id, self.scenario)
+                self.game.say(f"{self.members[member_id].name} called the flight off.", "system")
+            self.game = None
+            self.deadline = None
+        elif kind == "act":
+            self._act(member_id, msg)
+        else:
+            raise RoomError("Unknown message")
+        self.broadcast()
+
+    def _need_lobby(self, allowed: bool) -> None:
+        if self.game is not None:
+            raise RoomError("A flight is in progress")
+        if not allowed:
+            raise RoomError("Only the host can do that")
+
+    def _act(self, member_id: str, msg: dict[str, Any]) -> None:
+        if self.game is None:
+            raise RoomError("No flight in progress")
+        seat = msg.get("seat")
+        if seat not in SEATS or self.seats[seat] != member_id:
+            raise RoomError("That is not your seat")
+        action = msg.get("action")
+        if not isinstance(action, dict):
+            raise RoomError("Bad action")
+        try:
+            self.game.apply(seat, action)
+        except IllegalMove as e:
+            raise RoomError(str(e)) from e
+        self.after_game_change()
+
+    def after_game_change(self) -> None:
+        g = self.game
+        if g is None:
+            return
+        if g.phase == "place" and "realtime" in g.mods:
+            if self.deadline is None:
+                self.deadline = time.monotonic() + REALTIME_SECONDS
+                g.deadline_ms = int(time.time() * 1000) + REALTIME_SECONDS * 1000
+        else:
+            self.deadline = None
+            g.deadline_ms = None
+        if g.result is not None and not self.recorded:
+            self.recorded = True
+            self.progress.record(g.scenario.id, bool(g.result["won"]))
+            log.info(
+                "table %s %s %s: %s",
+                self.id,
+                "landed" if g.result["won"] else "lost",
+                g.scenario.id,
+                g.result["reason"],
+            )
+
+    def tick(self) -> None:
+        if self.game and self.deadline and time.monotonic() >= self.deadline and not self.game.result:
+            self.deadline = None
+            try:
+                self.game.apply("pilot", {"t": "timeout"})
+            except IllegalMove:
+                return
+            self.after_game_change()
+            self.broadcast()

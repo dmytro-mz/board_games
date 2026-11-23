@@ -1,0 +1,47 @@
+# First candidate: masked PPO, 2 players, one round per episode, reward = opponent
+# round score minus own round score (scaled). Opponents: heuristics + self-play
+# snapshots. Sized for an 11-core M3 Pro (8 env workers, torch on CPU).
+name: ppo_baseline
+seed: 0
+device: cpu
+torch_threads: 4
+snapshot_every_updates: 10
+save_every_updates: 50
+
+env:
+  n_players: 2
+  episode: round
+  reward: relative
+  reward_scale: 10.0
+  opponents:
+    random: 0.05
+    greedy: 0.15
+    ev: 0.40
+    self: 0.40
+  max_snapshots: 20
+  obs_version: 1
+
+ppo:
+  total_timesteps: 30_000_000
+  num_envs: 128
+  num_steps: 128
+  num_workers: 8
+  learning_rate: 2.5e-4
+  anneal_lr: true
+  gamma: 0.995
+  gae_lambda: 0.95
+  num_minibatches: 8
+  update_epochs: 4
+  clip_coef: 0.2
+  ent_coef: 0.01
+  ent_coef_final: 0.002
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  hidden: [256, 256]
+
+eval:
+  every_updates: 20
+  games: 400
+  opponents: [random, greedy, ev]
+  workers: 8
+  best_metric_opponent: ev

@@ -1,0 +1,23 @@
+---
+description: Phase 10 rules engine and bots
+globs: src/phase10/game/**,src/phase10/bots/**,tests/phase10/test_engine.py,tests/phase10/test_bots.py
+alwaysApply: false
+---
+
+# Rules engine
+
+- `Game.play(seat, action)` validates everything and raises `IllegalMove` with a player-facing message,
+  leaving the state untouched. It returns events (`deal`, `draw`, `lay_down`, `hit`, `discard`, `skipped`,
+  `reshuffle`, `dry`, `out`, `hand_over`, `tiebreak`, `game_over`) that the room narrates and the client animates.
+- Turn: DRAW (deck or discard, never a Skip) → PLAY (lay down the whole phase at once, then hits; discard ends
+  the turn). Going out can happen by discarding, hitting or laying down the last card.
+- Every group needs a natural card; groups may be longer than required. Runs store `low`; wilds take the gaps
+  and a lone wild on a run asks which end (`Hit.end`).
+- Skip: the discarder picks the target (`skip_targets`); not yourself, not someone with a Skip in front of
+  them. The card lies in `skip_cards[target]` (not on the discard pile) until the target's turn is skipped,
+  then goes onto the discard pile. House rule `RulesConfig.skip_cooldown`: also not someone who lost a turn and
+  hasn't played since (`skip_spent`). One target left: automatic.
+- End: fewest points among the finishers of the last phase. A tie on points sets `tied`: only those seats are
+  dealt in (`active`) to replay the last phase, and the first of them to go out wins.
+- `card_count()` must always be 108 (tests check it after every move of random games).
+- Bots get only `Game.view(seat)`; they must never read other hands or the draw pile order.

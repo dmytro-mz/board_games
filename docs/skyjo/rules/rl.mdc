@@ -1,0 +1,44 @@
+---
+description: RL training, encoding, logging and experiment workflow
+globs: src/skyjo/rl/**,configs/skyjo/**,docs/experiments.md
+alwaysApply: false
+---
+
+# RL conventions
+
+- Algorithm: masked PPO (`rl/ppo.py`, CleanRL style). Illegal actions are masked with
+  logits = -1e9; never let the env silently "fix" an illegal action.
+- torch only in `network.py`, `ppo.py`, `logger.py`. Workers use `PolicyAgent`
+  (numpy forward) — keep `network.ActorCritic.actor_layers()` and `mlp_forward` in sync
+  (`tests/skyjo/test_rl.py::test_policy_agent_matches_torch_actor`). Residual actors
+  (`ppo.residual_prior`, obs v3+) add `prior_scale * obs[prior block]` to the logits in both;
+  the scale travels with snapshots (`add_snapshot(layers, prior_scale)`) and the `.npz` meta.
+- Obs v3+ calls `ExpertAgent.action_values` on every encode, so expert speed is training speed.
+- Observation layouts are versioned (`rl/encoding.py`). Never edit an existing version:
+  add version N+1 behind `if self.version >= N+1`, add it to `SUPPORTED_VERSIONS`, bump
+  `OBS_VERSION`. Policies store their version in the `.npz`, so old runs stay loadable.
+  Configs pin `env.obs_version` for reproducibility. Layouts are declared once in
+  `encoding.layout()` (dims, prior offset, `input_feature_map` all derive from it).
+- Obs v4 is table-size agnostic (per-seat blocks padded to 8, `ObsEncoder.n_players` is None).
+  Train it on mixed tables with `env.table_sizes` and evaluate with `eval.table_sizes`
+  (`eval/<opp>_<n>p/*`, plus `eval/<opp>/mean_win_vs_fair`). `init_checkpoint` from an older
+  layout transplants the first-layer weights via `input_feature_map` (exact at the old size).
+- Device: default `cpu`. On the M3 the MLP is tiny; MPS is ~6× slower for per-step
+  inference (batch 128) and only wins on the optimiser step. Re-measure before switching.
+- Hardware budget (M3 Pro, 11 cores): eval is synchronous (training pauses), so
+  `ppo.num_workers` and `eval.workers` can each be ~10; `torch_threads` 4.
+
+## Logging contract (TensorBoard + `runs/<run>/metrics.csv`)
+
+- `charts/*` lr, ent_coef, sps · `losses/*` policy, value, entropy, approx_kl, clipfrac,
+  explained_variance · `rollout/*` episode stats vs the training pool ·
+  `eval/<opponent>/*` win_rate, round_score, game_score from full-game tournaments.
+- `eval/*` is the ground truth; `rollout/*` mixes opponents and is noisy.
+- New metrics: add to the right namespace and, if important, a panel in `plotting.py`.
+
+## Experiment workflow
+
+1. Smoke run first: `uv run bg skyjo train -c configs/skyjo/smoke.yaml -s run_root=runs_smoke`.
+2. New idea = new YAML in `configs/skyjo/` (don't mutate a config referenced in experiments.md).
+3. Evaluate the best policy: `uv run bg skyjo eval -a "ppo:runs/<run>/policy_best.npz,ev" -n 2000`.
+4. Append the result row to `docs/experiments.md`.

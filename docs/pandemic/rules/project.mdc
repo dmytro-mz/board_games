@@ -1,0 +1,51 @@
+---
+description: Pandemic project map, layering and day-to-day commands
+alwaysApply: true
+---
+
+# Pandemic — project map
+
+Goal: an online Pandemic (classic edition) for friends — the complete game, a readable world map that zooms
+from the whole world to a crowded region, bots good enough to fill empty seats, and a table that works from a
+phone to full HD.
+
+## Layout and dependency direction (never import "upwards")
+
+```
+pandemic/game/      rules engine, pure Python, no I/O                  (lowest layer)
+  model.py          48 cities + routes, roles, event cards, distances/path, catalogue() for the client
+  actions.py        action dataclasses + JSON protocol (to_json / from_json)
+  engine.py         Game state machine: Game.play(seat, action) -> events, undo, view(seat) -> View, sandbox
+pandemic/bots/      Bot ABC (act / react) · planner.py (beam-search turn planner) · registry (rookie, expert)
+pandemic/runner.py  play_game(bots, seed, rules)
+pandemic/web/       room.py (sync table logic, no I/O) · server.py (FastAPI + WebSocket, /api/config)
+                    static/ (vanilla ES-module client, no build step)
+pandemic/cli.py     typer CLI (entry point `pandemic`: serve, eval)
+scripts/            build_map (map-data.js from Natural Earth) · demo / shot / sizes / ui_check / flow_check / glitch_check (browser checks)
+```
+
+## Commands (always via uv, never pip; in the sandbox `export UV_CACHE_DIR=.uv-cache`)
+
+- Tests: `uv run pytest` (must pass before you say you're done)
+- Lint/format: `uv run ruff check --fix . && uv run ruff format .`
+- Play: `uv run bg serve` (LAN) · `uv run bg serve --tunnel` (public link via cloudflared)
+- Bot strength: `uv run bg pandemic eval -a expert,rookie -n 150` (win rate per team size and difficulty)
+- See the UI: `uv run python scripts/pandemic/demo.py --stage home|lobby|play|draw|epidemic|infect|discard|over --out shots/x.png`
+- Click through whole games in Chrome: `uv run python scripts/pandemic/ui_check.py [--role R] [--closed] [--size WxH] [--bots N]`
+- A whole table as real people (typing, a touch phone, a spectator, reloads): `uv run python scripts/pandemic/flow_check.py [--closed]`
+- One stage at phone → full HD sizes (plus a city popover): `uv run python scripts/pandemic/sizes.py --stage play`
+- Visual glitches at real bot speed (replayed animations, flicker, lost focus; `--snap 5` saves frames to look at):
+ `uv run python scripts/pandemic/glitch_check.py [--bots N] [--size WxH] [--touch] [--closed] [--role R]`
+- The browser scripts share port 8765: run them one after another, not in parallel.
+
+## Working agreements
+
+- The server is authoritative; clients only send intents. Never trust client input.
+- The UI never computes risks, odds or "danger" for players (no outbreak warnings, no known infection-deck top).
+  It shows what is on the table and explains why an action isn't possible; judging the board is the players' job.
+- Hidden information: with closed hands only your own cards (and Epidemics) reach your browser; the order of
+  the decks is never sent. Bots see open hands (they can't chat).
+- Any rules change goes in `game/` with a test in `tests/pandemic/test_engine.py`; keep `static/rules.js` in sync (it
+  mirrors legality only to enable buttons and explain; the server re-checks everything).
+- UI changes: render with `scripts/pandemic/demo.py`, look at the screenshot, run `scripts/pandemic/ui_check.py`, `scripts/pandemic/flow_check.py`, `scripts/pandemic/sizes.py` and `scripts/pandemic/glitch_check.py`.
+- `shots/` and `tmp/` are scratch output (gitignored).

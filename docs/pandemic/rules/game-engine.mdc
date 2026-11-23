@@ -1,0 +1,30 @@
+---
+description: Pandemic rules engine and bots
+globs: src/pandemic/game/**,src/pandemic/bots/**,src/pandemic/runner.py,tests/pandemic/test_engine.py,tests/pandemic/test_bots.py
+alwaysApply: false
+---
+
+# Rules engine
+
+- `Game.play(seat, action)` validates everything and raises `IllegalMove` with a player-facing message,
+  leaving the state untouched. It returns events (`turn`, `move`, `treat`, `build`, `share`, `cure`, `draw`,
+  `epidemic`, `infect`, `outbreak`, `prevented`, `intensify`, `event`, `forecast`, `discard`, `game_over`, …)
+  that the room narrates and the client animates.
+- Steps: ACTIONS (4, or `Pass`) → DRAW (`DrawCards`, 2 cards) → EPIDEMIC (one per Epidemic drawn: increase and
+  infect happen on draw, `Continue` intensifies) → INFECT (`Continue` infects) → next player's ACTIONS.
+  `waiting_for()` is the Forecast seat, else the seat over the hand limit, else the current seat.
+- Hand limit 7: the seat over it must `Discard` (or play an event) before anything else; it can be any seat
+  (Share Knowledge).
+- Events are allowed for any seat at any time except while a Forecast is being arranged, while someone else is
+  over the hand limit, and during an epidemic only Resilient Population. Events never use an action.
+- Treat removes 1 cube, or all cubes of a cured disease; the Medic always all (and clears cured cubes for free).
+  Eradication happens when a cured disease has no cubes left.
+- Undo (`Game.undo`) only covers turn actions of the current turn and is cleared by anything that reveals
+  information or is out of turn (draws, events, discards).
+- Invariants (checked over random games in `test_random_games_keep_the_invariants`): player cards always add up
+  to 53 + epidemics, infection cards to 48, cubes on the board + supply to 24 per colour, max 3 per city,
+  max 6 stations. `Game.clone()` must play identically.
+- Bots get only `Game.view(seat)` → `View`, and try moves on `view.sandbox()` (hidden cards are placeholders).
+  `act` answers when the game waits for the bot; `react` may return an event to play out of turn.
+- `Planner(beam, noise, events)` searches a whole turn with `evaluate()`; Rookie is `beam=1, noise=0.25,
+  events=False`. Tune with `uv run bg pandemic eval`.

@@ -1,0 +1,44 @@
+---
+description: Skyjo RL project map, layering and day-to-day commands
+alwaysApply: true
+---
+
+# Skyjo RL — project map
+
+Goal: a correct Skyjo engine, strong heuristic baselines, and RL agents that beat them.
+
+## Layout and dependency direction (never import "upwards")
+
+```
+skyjo/game/        rules engine, pure Python, no numpy/torch      (lowest layer)
+skyjo/agents/      Agent ABC + heuristics (random, greedy, ev) + registry
+skyjo/runner.py    play_game(agents, rules, seed)
+skyjo/evaluation/  tournaments: seat rotation, seeds, CIs, multiprocessing
+skyjo/rl/          encoding/env/vec_env/opponents/policy_agent = numpy only
+                   network/ppo/logger = the ONLY torch importers
+skyjo/web/         multiplayer: bots.py (lobby catalog) · room.py (sync table logic, no I/O)
+                   server.py (FastAPI + WebSocket) · static/ (vanilla JS client, no build step)
+skyjo/cli.py       typer CLI (entry point `skyjo`)
+configs/skyjo/*.yaml     training configs  ·  docs/  rules + research + experiments
+```
+
+## Commands (always via uv)
+
+- Tests: `uv run pytest` (must pass before you say you're done)
+- Lint/format: `uv run ruff check --fix src tests && uv run ruff format src tests`
+- Evaluate: `uv run bg skyjo eval -a ev,greedy -n 2000` · `uv run bg skyjo league -a random,greedy,ev`
+- Debug a game: `uv run bg skyjo watch -a ev,greedy`
+- Web game: `uv run bg serve` (LAN) · `uv run bg serve --tunnel` (public link, needs cloudflared)
+- Train: `uv run bg skyjo train -c configs/skyjo/ppo_baseline.yaml -s ppo.total_timesteps=1e6`
+- Smoke train (~1 min): `uv run bg skyjo train -c configs/skyjo/smoke.yaml -s run_root=runs_smoke`
+- Curves: `uv run tensorboard --logdir runs` or `uv run bg skyjo plot runs/<run>`
+
+## Working agreements
+
+- New strategy = new `Agent` subclass + `REGISTRY` entry + a test in `tests/skyjo/test_agents.py`.
+- Claims about strength need a tournament with CIs (≥1000 games), never single games.
+- Don't commit `runs/`, `runs_smoke/`, `results/`, `logs/` (gitignored).
+- Record experiment outcomes in `docs/experiments.md` (config, steps, eval vs ev).
+- Web lobby offers only obs v4+ policies (any table size, `bots.MIN_WEB_OBS_VERSION`).
+- Web: the server is authoritative; clients only get `Room.state_for` snapshots, which must never
+  contain face-down values (`tests/skyjo/test_web.py` checks this). Game rules stay in `skyjo/game/`.

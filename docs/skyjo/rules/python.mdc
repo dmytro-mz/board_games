@@ -1,0 +1,27 @@
+---
+description: Python conventions for this repo
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python conventions
+
+- Python 3.12, `from __future__ import annotations`, full type hints, ruff line length 120.
+- Dependencies only via `uv add <pkg>` / `uv add --dev <pkg>`; never pip.
+- Config = dataclasses (`RulesConfig`, `EnvConfig`, `PPOConfig`...), not loose dicts.
+- Randomness is injected (`random.Random(seed)` / `np.random.default_rng`), never global.
+  Tournaments and envs must be reproducible from a seed.
+- Hot paths (engine, encoder, heuristics) run millions of times: prefer plain lists/tuples
+  in the engine, vectorised numpy in the encoder; measure with `uv run bg skyjo bench`.
+- Anything sent to worker processes (agents, env configs) must be picklable;
+  `tests/skyjo/test_agents.py::test_agents_are_picklable` guards this.
+- Comments explain constraints, not what the next line does.
+
+```python
+# ❌ global RNG, untyped
+def pick(legal): return random.choice(legal)
+
+# ✅
+def act(self, obs: Observation, legal: Sequence[int]) -> int:
+    return self.rng.choice(legal)
+```
