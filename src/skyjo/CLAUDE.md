@@ -37,6 +37,8 @@ configs/skyjo/*.yaml     training configs  ·  docs/  rules + research + experim
 - Don't commit `runs/`, `runs_smoke/`, `results/`, `logs/` (gitignored).
 - Record experiment outcomes in `docs/experiments.md` (config, steps, eval vs ev).
 - Web lobby offers only obs v4+ policies (any table size, `bots.MIN_WEB_OBS_VERSION`).
+- Web bots decide through `Table.think(key, ...)` (`Room._auto_move`, `_auto_setup`): off the event loop under
+  `drive()`, inline when tests call `plan()` steps directly. Code before `think` in a step must have no side effects.
 - Web: the server is authoritative; clients only get `Room.state_for` snapshots, which must never
   contain face-down values (`tests/skyjo/test_web.py` checks this). Game rules stay in `skyjo/game/`.
 

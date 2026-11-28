@@ -85,7 +85,7 @@ src/skyjo/game/        rules engine (pure Python)      docs/rules.md
 src/skyjo/agents/      heuristic agents + registry
 src/skyjo/evaluation/  parallel tournaments with CIs
 src/skyjo/rl/          encoder, env, vec env, opponent pool, PPO, logger
-src/skyjo/web/         multiplayer server (FastAPI + WebSocket) and static browser client
+src/skyjo/web/         multiplayer server (Starlette + WebSocket) and static browser client
 configs/skyjo/               training configs                 docs/experiments.md
 models/ppo_v4/         shipped trained policy (numpy .npz, no torch needed to play)
 .cursor/rules/         guidance for AI coding agents

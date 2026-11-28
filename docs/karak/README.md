@@ -141,7 +141,7 @@ src/karak/
   bots/      Bot interface, the planner, the Squire / Adventurer / Champion bots, the AI bot and models/
   nn/        board encoding for the network and a numpy forward pass (no torch needed to play)
   rl/        training: environments, worker processes, the network, imitation + PPO loop, configs
-  web/       room logic, FastAPI + WebSocket server, and the vanilla JS client in static/ (no build step)
+  web/       room logic, Starlette + WebSocket server, and the vanilla JS client in static/ (no build step)
   runner.py  play a bot-only game
   cli.py     the `karak` command (serve, eval, train, eval-ai)
 configs/karak/     training configs

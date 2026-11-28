@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from boardgames.table import MAX_NAME, Member, RoomError, Table, clean_text
+from boardgames.table import MAX_NAME, Member, RoomError, Table, clean_text, prewarm_bots, think_apart
 from toybattle.bots import REGISTRY, Bot, GeneralBot
 from toybattle.game.engine import Action, BadAction, Event, Game, IllegalMove, Phase
 from toybattle.game.terrains import DEFAULT_TERRAIN, TERRAINS
@@ -198,6 +198,7 @@ class Room(Table):
             n += 1
             name = f"{bot.label} {n}"
         self.seats.append(Seat(name=name, bot=key))
+        prewarm_bots()
         self._emit({"kind": "lobby"})
 
     def _remove_seat(self, seat: object) -> None:
@@ -424,7 +425,9 @@ class Room(Table):
             ready_at = max(self.busy_until, time.monotonic()) + self._bot_delay(game)
             view = game.view(seat)
             try:
-                action = await asyncio.to_thread(self._agent(seat).act, view)
+                agent = self._agent(seat)
+                action, thought = await think_apart(agent, "act", view)
+                self._keep_agent(agent, thought)
             except Exception:
                 log.exception("room %s: bot failed", self.id)
                 self._crashed()

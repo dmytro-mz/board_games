@@ -16,8 +16,8 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
 from playwright.async_api import async_playwright
+from starlette.applications import Starlette
 
 from boardgames.testing import game_app
 from codenames.game.engine import Phase
@@ -71,7 +71,7 @@ def prepare(stage: str, deck: str, seed: int = 4) -> Room:
 
 
 @contextlib.asynccontextmanager
-async def serving(app: FastAPI, room: Room, port: int = PORT) -> AsyncIterator[str]:
+async def serving(app: Starlette, room: Room, port: int = PORT) -> AsyncIterator[str]:
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     task = asyncio.create_task(server.serve())
     while not server.started:

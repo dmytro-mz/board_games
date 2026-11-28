@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from starlette.applications import Starlette
 
 from boardgames.testing import game_app
 from lostcities.game.engine import Phase
@@ -59,7 +59,7 @@ def prepare(stage: str = "play", turns: int = 14, seed: int = 3, bot: str = "pat
 
 
 @contextlib.asynccontextmanager
-async def serving(app: FastAPI, room: Room, port: int = PORT) -> AsyncIterator[str]:
+async def serving(app: Starlette, room: Room, port: int = PORT) -> AsyncIterator[str]:
     """Run the app in this event loop with `room` adopted; yields the player's personal URL."""
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     task = asyncio.create_task(server.serve())

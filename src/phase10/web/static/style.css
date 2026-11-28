@@ -376,11 +376,16 @@ body.has-selection .group.hittable:hover { background: rgba(255, 210, 63, 0.14);
 .pile .card:not(.under) { position: relative; }
 .pile-label { font-size: 0.72rem; color: var(--muted); font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
 .pile.can { cursor: pointer; }
-.pile.can .stack > .card:not(.under) { box-shadow: 0 0 0 3px var(--accent), 0 0 24px rgba(255, 210, 63, 0.6); animation: pulse 1.4s ease-in-out infinite; }
+.pile.can .stack > .card:not(.under) { box-shadow: 0 0 0 3px var(--accent), 0 0 8px rgba(255, 210, 63, 0.3); }
+/* The wide glow breathes as opacity on its own layer (the compositor animates it: no repaint every frame). */
+.pile.can .stack > .card:not(.under)::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 24px rgba(255, 210, 63, 0.6); animation: pile-glow 1.4s ease-in-out infinite;
+}
+@keyframes pile-glow { 50% { opacity: 0; } }
 .pile.can:hover .stack > .card:not(.under) { transform: translateY(-4px); }
 .pile.can-drop { cursor: pointer; }
 .pile.can-drop .stack > .card:not(.under) { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.7), 0 0 18px rgba(255, 255, 255, 0.35); }
-@keyframes pulse { 50% { box-shadow: 0 0 0 3px var(--accent), 0 0 8px rgba(255, 210, 63, 0.3); } }
 .track { background: rgba(0, 0, 0, 0.22); border-radius: 14px; padding: 8px 12px 10px; min-width: 0; max-width: 100%; }
 .track-title { font-size: 0.68rem; color: var(--muted); font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
 .track-steps { display: grid; grid-template-columns: repeat(var(--steps), minmax(22px, 30px)); gap: 4px; }

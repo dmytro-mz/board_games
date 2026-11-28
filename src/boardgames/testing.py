@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 
 from boardgames.games import GameRoom
 from boardgames.server import Hub, create_app
@@ -36,7 +36,7 @@ class Tables:
         return self.hub.create_table(self.key).room  # type: ignore[return-value]
 
 
-def game_app(key: str, delay_scale: float = 1.0, **options: Any) -> FastAPI:
+def game_app(key: str, delay_scale: float = 1.0, **options: Any) -> Starlette:
     """The platform with only this game; `app.state.manager` holds its tables."""
     app = create_app(delay_scale=delay_scale, game_options={key: options}, only=[key])
     app.state.manager = Tables(app.state.hub, key)

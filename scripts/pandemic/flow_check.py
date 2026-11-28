@@ -107,7 +107,7 @@ class Flow:
 
     async def state(self, p: Person, expr: str):
         return await p.page.evaluate(
-            f"async () => {{ const {{ S }} = await import('/g/pandemic/static/store.js'); return {expr}; }}"
+            f"async () => {{ const {{ S }} = await import(new URL('store.js', document.querySelector('script[type=module]').src).href); return {expr}; }}"
         )
 
     # ------------------------------------------------------------------ the walk
@@ -355,7 +355,10 @@ class Flow:
         await page.locator("#zfit").tap()
         # a tap on a city right after a pinch opens it
         city = "atl"
-        await page.evaluate("async (id) => (await import('/g/pandemic/static/board.js')).ensureVisible(id)", city)
+        await page.evaluate(
+            "async (id) => (await import(new URL('board.js', document.querySelector('script[type=module]').src).href)).ensureVisible(id)",
+            city,
+        )
         await page.locator(f'#map .city[data-id="{city}"] .node').tap()
         await page.wait_for_selector("#pop:not(.hidden)")
         await self.has_text(boris, "#pop", "Atlanta", "the tapped city opens")

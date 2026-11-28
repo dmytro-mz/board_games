@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from starlette.applications import Starlette
 
 from boardgames.testing import game_app
 from pandemic.game.engine import Step
@@ -83,7 +83,7 @@ def _try(stage: str, bots: int, seed: int, delay_scale: float, closed: bool, epi
 
 
 @contextlib.asynccontextmanager
-async def serving(app: FastAPI, room: Room, port: int = PORT) -> AsyncIterator[str]:
+async def serving(app: Starlette, room: Room, port: int = PORT) -> AsyncIterator[str]:
     """Run the app in this event loop with `room` adopted; yields the player's personal URL."""
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     task = asyncio.create_task(server.serve())

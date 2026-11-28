@@ -21,7 +21,7 @@ from avenue.game import actions
 from avenue.game.actions import choice_json
 from avenue.game.cards import AGENT_LIST, HAND_SIZE, MARKET_LIST, TRACK
 from avenue.game.engine import Action, Event, Game, IllegalMove, Phase
-from boardgames.table import MAX_NAME, Member, RoomError, Table, clean_text
+from boardgames.table import MAX_NAME, Member, RoomError, Table, clean_text, prewarm_bots, think_apart
 
 log = logging.getLogger(__name__)
 
@@ -258,6 +258,7 @@ class Room(Table):
             n += 1
             name = f"{info.label} {n}"
         self.seats.append(Seat(name=name, team=target, bot=info.key))
+        prewarm_bots()
         self._emit({"kind": "lobby"})
 
     def _check_seat(self, seat: object) -> int:
@@ -523,7 +524,9 @@ class Room(Table):
             view = game.redacted(seat)
             self.thinking = seat
             try:
-                action = await asyncio.to_thread(self._agent(seat).act, view, seat)
+                agent = self._agent(seat)
+                action, thought = await think_apart(agent, "act", view, seat)
+                self._keep_agent(agent, thought)
             except Exception:
                 log.exception("room %s: bot failed", self.id)
                 self.thinking = None
@@ -584,7 +587,9 @@ class Room(Table):
             if seat not in self._deciders(game):
                 break
             version = self.version
-            action = await asyncio.to_thread(self._autopilot.act, game.redacted(seat), seat)
+            agent = self._autopilot
+            action, thought = await think_apart(agent, "act", game.redacted(seat), seat)
+            self._keep_agent(agent, thought)
             if self.version != version or self.game is not game:
                 break
             try:

@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
-
 from boardgames.games import GameSpec
 from ttr.game.europe import EUROPE
 from ttr.web.room import MAX_SEATS, MIN_SEATS, Room, RoomError, bots_public
@@ -23,8 +21,8 @@ class Backend:
     def config(self) -> dict[str, Any]:
         return {"bots": bots_public()}
 
-    def routes(self, router: APIRouter) -> None:
-        @router.get("/api/map")
+    def routes(self, router: Any) -> None:
+        @router.get("/api/map", constant=True)
         async def board_json() -> dict[str, Any]:
             return self.board
 

@@ -10,6 +10,7 @@ own lobby and table. The platform (`src/boardgames`) hosts the rooms; every game
 with its invariants; read it before touching that game.
 
 Reference for adding a game, the layout, the plug-in contract and the commands: [docs/platform.md](docs/platform.md).
+**Technical rules every game follows** (engine, server, bots, client, assets, verification): [tech_rules.md](tech_rules.md).
 The BGG complexity weight on a tile is looked up with the `bgg-weight` skill.
 
 ## Product rules (from the owner — keep them true)
@@ -39,6 +40,9 @@ The BGG complexity weight on a tile is looked up with the `bgg-weight` skill.
 - Dependencies point one way: `boardgames` never imports a game except through `games.load_games()`; inside a game
   `game/` ← `bots/` ← `web/`.
 - Platform UI must not leak styles into games (they run in an iframe).
+- Cheap by default: nothing blocks the event loop, an idle client draws no frames, static files are versioned and
+  cached for good ([tech_rules.md](tech_rules.md); measurements in [docs/performance.md](docs/performance.md)).
 - All art is original; never copy a published game's artwork or rulebook text.
 - Always `uv`, never pip. `uv run pytest -n 8` must pass before you say you're done. A platform change also needs
   `scripts/platform/ui_check.py`; a game change needs that game's tests, its `ui_check.py` and a look at a screenshot.
+  A change to the platform or a game's client or bots also runs `scripts/platform/perf_check.py` (budgets).

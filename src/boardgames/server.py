@@ -20,12 +20,16 @@ from collections.abc import AsyncIterator, Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.routing import BaseRoute, Mount, Route, WebSocketRoute
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from boardgames.games import Backend, GameRoom, GameSpec, load_games
-from boardgames.net import Connection, RevalidatedStatic, client_origin
+from boardgames.net import CachedJSON, Connection, PageRewriter, StaticDir, client_origin, error
 from boardgames.party import Party, PartyError
+from boardgames.table import shutdown_bots
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +48,57 @@ def run_game(room: GameRoom) -> Callable[[], None]:
     return task.cancel
 
 
+class TooManyRooms(Exception):
+    pass
+
+
+class Router:
+    """Routes a game adds under /g/<key>/ (`Backend.routes`): `@router.get("/api/x")` on a handler that returns
+    JSON-able data, with the path parameters as keyword arguments."""
+
+    def __init__(self) -> None:
+        self.routes: list[BaseRoute] = []
+
+    def get(self, path: str, constant: bool = False) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """`constant`: the answer never changes while the server runs (encoded once, revalidated by ETag)."""
+        return self._add(path, ["GET"], constant)
+
+    def post(self, path: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self._add(path, ["POST"])
+
+    def _add(
+        self, path: str, methods: list[str], constant: bool = False
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def decorate(fn: Callable[..., Any]) -> Callable[..., Any]:
+            cached: list[CachedJSON] = []
+
+            async def endpoint(request: Request) -> Response:
+                if cached:
+                    return cached[0].response(request)
+                out = await fn(**request.path_params)
+                if isinstance(out, Response):
+                    return out
+                if constant:
+                    cached.append(CachedJSON(out))
+                    return cached[0].response(request)
+                return JSONResponse(out)
+
+            self.routes.append(Route(path, endpoint, methods=methods))
+            return fn
+
+        return decorate
+
+    def websocket(self, path: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def decorate(fn: Callable[..., Any]) -> Callable[..., Any]:
+            async def endpoint(ws: WebSocket) -> None:
+                await fn(ws, **ws.path_params)
+
+            self.routes.append(WebSocketRoute(path, endpoint))
+            return fn
+
+        return decorate
+
+
 class Hub:
     """All parties of this server."""
 
@@ -60,7 +115,7 @@ class Hub:
 
     def create(self, code: str | None = None) -> Party:
         if len(self.parties) >= MAX_ROOMS:
-            raise HTTPException(503, "Too many rooms open, try again later")
+            raise TooManyRooms("Too many rooms open, try again later")
         party = Party(code or self._code(), self.games, self.backends, run_game=run_game)
         self.parties[party.id] = party
         return party
@@ -142,11 +197,15 @@ def _seated(room: GameRoom) -> int:
     return len(seats) if seats is not None else len(room.members)
 
 
-def _index(path: Path) -> Callable[..., Any]:
-    async def index(code: str | None = None) -> FileResponse:
-        return FileResponse(path, headers={"Cache-Control": "no-cache"})
-
-    return index
+async def _socket_loop(ws: WebSocket, conn: Connection, handle: Callable[[dict[str, Any]], bool]) -> None:
+    """Feed a socket's messages to `handle` (returns False to stop) until it closes."""
+    try:
+        while True:
+            msg = await ws.receive_json()
+            if isinstance(msg, dict) and not handle(msg):
+                break
+    except (WebSocketDisconnect, ValueError, RuntimeError):
+        pass
 
 
 def create_app(
@@ -155,49 +214,51 @@ def create_app(
     delay_scale: float = 1.0,
     game_options: dict[str, dict[str, Any]] | None = None,
     only: Iterable[str] | None = None,
-) -> FastAPI:
+) -> Starlette:
     """`game_options` holds each game's extra server options ({"skyjo": {"model_dirs": [...]}}); `only` limits the
     catalogue to some games (tests)."""
     games = load_games(tuple(only)) if only is not None else load_games()
     options = game_options or {}
     backends = {key: spec.backend(delay_scale=delay_scale, **options.get(key, {})) for key, spec in games.items()}
     hub = Hub(games, backends)
+    platform = StaticDir(STATIC, "/static")
 
     @contextlib.asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(_: Starlette) -> AsyncIterator[None]:
         sweeper = asyncio.create_task(hub.sweep())
         yield
         sweeper.cancel()
         hub.close()
-
-    app = FastAPI(title="Board games", lifespan=lifespan, docs_url=None, redoc_url=None)
-    app.state.hub = hub
+        shutdown_bots()
 
     # ------------------------------------------------------------------ platform
-    tiles = []
-    for spec in games.values():
-        thumb = STATIC / "thumbs" / f"{spec.key}.jpg"
-        tiles.append({**spec.public(), "thumb": f"/static/thumbs/{spec.key}.jpg" if thumb.exists() else None})
+    def tiles() -> list[dict[str, Any]]:
+        out = []
+        for spec in games.values():
+            thumb = STATIC / "thumbs" / f"{spec.key}.avif"
+            out.append({**spec.public(), "thumb": platform.url(f"thumbs/{spec.key}.avif") if thumb.exists() else None})
+        return out
 
-    @app.get("/api/config")
-    async def config() -> dict[str, Any]:
-        return {"public_url": public_url, "lan_url": lan_url, "games": tiles}
+    async def config(request: Request) -> Response:
+        return JSONResponse({"public_url": public_url, "lan_url": lan_url, "games": tiles()})
 
-    @app.post("/api/rooms")
-    async def create_room() -> dict[str, str]:
-        return {"room": hub.create().id}
+    async def create_room(request: Request) -> Response:
+        try:
+            return JSONResponse({"room": hub.create().id})
+        except TooManyRooms as e:
+            return error(503, str(e))
 
-    @app.get("/api/rooms/{code}")
-    async def room_info(code: str) -> dict[str, Any]:
-        party = hub.get(code)
+    async def room_info(request: Request) -> Response:
+        party = hub.get(request.path_params["code"])
         if party is None:
-            raise HTTPException(404, "No room with that code")
-        return {"room": party.id, "phase": party.phase, "game": party.game_key, "players": len(party.online())}
+            return error(404, "No room with that code")
+        return JSONResponse(
+            {"room": party.id, "phase": party.phase, "game": party.game_key, "players": len(party.online())}
+        )
 
-    @app.websocket("/ws/{code}")
-    async def party_socket(ws: WebSocket, code: str) -> None:
+    async def party_socket(ws: WebSocket) -> None:
         await ws.accept()
-        party = hub.get(code)
+        party = hub.get(ws.path_params["code"])
         if party is None:
             await ws.send_json({"type": "fatal", "message": "This room doesn't exist (anymore)."})
             await ws.close()
@@ -214,67 +275,78 @@ def create_app(
         conn = Connection(ws, member.id)
         pump = asyncio.create_task(conn.pump())
         party.connect(conn)
+
+        def handle(msg: dict[str, Any]) -> bool:
+            try:
+                party.handle(member.id, msg)
+            except PartyError as e:
+                conn.send({"type": "error", "message": str(e)})
+            except Exception:
+                log.exception("room %s: request failed", party.id)
+                conn.send({"type": "error", "message": "Server error"})
+            return True
+
         try:
-            while True:
-                msg = await ws.receive_json()
-                if not isinstance(msg, dict):
-                    continue
-                try:
-                    party.handle(member.id, msg)
-                except PartyError as e:
-                    conn.send({"type": "error", "message": str(e)})
-                except Exception:
-                    log.exception("room %s: request failed", party.id)
-                    conn.send({"type": "error", "message": "Server error"})
-        except (WebSocketDisconnect, ValueError, RuntimeError):
-            pass
+            await _socket_loop(ws, conn, handle)
         finally:
             party.disconnect(conn)
             pump.cancel()
 
-    index = _index(STATIC / "index.html")
-    app.get("/")(index)
-    app.get("/r/{code}")(index)
+    room_page = PageRewriter(STATIC / "index.html", platform)
 
+    async def index(request: Request) -> Response:
+        return room_page.response(request)
+
+    routes: list[BaseRoute] = [
+        Route("/api/config", config),
+        Route("/api/rooms", create_room, methods=["POST"]),
+        Route("/api/rooms/{code}", room_info),
+        WebSocketRoute("/ws/{code}", party_socket),
+        Route("/", index),
+        Route("/r/{code}", index),
+    ]
     # ------------------------------------------------------------------ games
     for spec in games.values():
-        app.include_router(_game_router(spec, backends[spec.key], hub, public_url, lan_url), prefix=f"/g/{spec.key}")
-        mounts = getattr(backends[spec.key], "mounts", dict)()
-        for name, folder in mounts.items():
-            app.mount(f"/g/{spec.key}/{name}", RevalidatedStatic(directory=folder), name=f"{spec.key}-{name}")
-        app.mount(f"/g/{spec.key}/static", RevalidatedStatic(directory=spec.static), name=f"{spec.key}-static")
+        routes.append(
+            Mount(f"/g/{spec.key}", routes=_game_routes(spec, backends[spec.key], hub, platform, public_url, lan_url))
+        )
+    routes.append(Mount("/static", app=platform))
 
-    app.mount("/static", RevalidatedStatic(directory=STATIC), name="static")
+    app = Starlette(routes=routes, lifespan=lifespan)
+    app.state.hub = hub
     return app
 
 
-def _game_router(spec: GameSpec, backend: Backend, hub: Hub, public_url: str | None, lan_url: str | None) -> APIRouter:
-    router = APIRouter()
-    error = spec.error
+def _game_routes(
+    spec: GameSpec, backend: Backend, hub: Hub, platform: StaticDir, public_url: str | None, lan_url: str | None
+) -> list[BaseRoute]:
+    error_type = spec.error
     on_connect = getattr(backend, "on_connect", None)
     on_message = getattr(backend, "on_message", None)
+    own = StaticDir(spec.static, f"/g/{spec.key}/static")
+    page = PageRewriter(spec.static / "index.html", own, platform)
+    game_config = CachedJSON({"public_url": public_url, "lan_url": lan_url, **backend.config()})
 
-    @router.get("/api/config")
-    async def config() -> dict[str, Any]:
-        return {"public_url": public_url, "lan_url": lan_url, **backend.config()}
+    async def config(request: Request) -> Response:
+        return game_config.response(request)
 
-    @router.post("/api/rooms")
-    async def quick_table() -> dict[str, str]:
+    async def quick_table(request: Request) -> Response:
         """Open a table of this game without voting (browser checks, tests; the room page uses /api/rooms)."""
-        return {"room": hub.create_table(spec.key).id}
+        try:
+            return JSONResponse({"room": hub.create_table(spec.key).id})
+        except TooManyRooms as e:
+            return error(503, str(e))
 
-    @router.get("/api/rooms/{code}")
-    async def room_info(code: str) -> dict[str, Any]:
-        found = hub.table(spec.key, code)
+    async def room_info(request: Request) -> Response:
+        found = hub.table(spec.key, request.path_params["code"])
         if found is None:
-            raise HTTPException(404, "No table with that code")
+            return error(404, "No table with that code")
         room = found[1]
-        return {"room": room.id, "status": room.status, "players": _seated(room)}
+        return JSONResponse({"room": room.id, "status": room.status, "players": _seated(room)})
 
-    @router.websocket("/ws/{code}")
-    async def table_socket(ws: WebSocket, code: str) -> None:
+    async def table_socket(ws: WebSocket) -> None:
         await ws.accept()
-        found = hub.table(spec.key, code)
+        found = hub.table(spec.key, ws.path_params["code"])
         if found is None:
             await ws.send_json({"type": "fatal", "message": "This table doesn't exist (anymore)."})
             await ws.close()
@@ -285,7 +357,7 @@ def _game_router(spec: GameSpec, backend: Backend, hub: Hub, public_url: str | N
             return
         try:
             member = room.join(hello["token"], hello.get("name"), client_origin(ws))
-        except error as e:
+        except error_type as e:
             await ws.send_json({"type": "fatal", "message": str(e)})
             await ws.close()
             return
@@ -294,37 +366,50 @@ def _game_router(spec: GameSpec, backend: Backend, hub: Hub, public_url: str | N
         room.connect(conn)
         if on_connect is not None:
             on_connect(room, conn)
+
+        def handle(msg: dict[str, Any]) -> bool:
+            if party.room is not room:
+                conn.send({"type": "fatal", "message": "The room went back to choosing a game."})
+                return False
+            try:
+                if on_message is not None and on_message(room, conn, msg):
+                    return True
+                reply = room.handle(conn.member_id, msg)
+            except error_type as e:
+                conn.send({"type": "error", "message": str(e)})
+            except Exception:
+                log.exception("table %s: request failed", room.id)
+                conn.send({"type": "error", "message": "Server error"})
+            else:
+                if reply is not None:
+                    conn.send(reply)
+            party.game_changed()
+            return True
+
         try:
-            while True:
-                msg = await ws.receive_json()
-                if not isinstance(msg, dict):
-                    continue
-                if party.room is not room:
-                    conn.send({"type": "fatal", "message": "The room went back to choosing a game."})
-                    break
-                try:
-                    if on_message is not None and on_message(room, conn, msg):
-                        continue
-                    reply = room.handle(conn.member_id, msg)
-                except error as e:
-                    conn.send({"type": "error", "message": str(e)})
-                except Exception:
-                    log.exception("table %s: request failed", room.id)
-                    conn.send({"type": "error", "message": "Server error"})
-                else:
-                    if reply is not None:
-                        conn.send(reply)
-                party.game_changed()
-        except (WebSocketDisconnect, ValueError, RuntimeError):
-            pass
+            await _socket_loop(ws, conn, handle)
         finally:
             conn.member_id = member.id  # test tools may have switched the socket to another member
             room.disconnect(conn)
             pump.cancel()
 
-    index = _index(spec.static / "index.html")
-    router.get("/")(index)
-    router.get("/r/{code}")(index)
+    async def index(request: Request) -> Response:
+        return page.response(request)
+
+    router = Router()
     if hasattr(backend, "routes"):
         backend.routes(router)
-    return router
+    routes: list[BaseRoute] = [
+        Route("/api/config", config),
+        Route("/api/rooms", quick_table, methods=["POST"]),
+        Route("/api/rooms/{code}", room_info),
+        WebSocketRoute("/ws/{code}", table_socket),
+        Route("/", index),
+        Route("/r/{code}", index),
+        *router.routes,
+    ]
+    mounts = getattr(backend, "mounts", dict)()
+    for name, folder in mounts.items():
+        routes.append(Mount(f"/{name}", app=StaticDir(folder, f"/g/{spec.key}/{name}")))
+    routes.append(Mount("/static", app=own))
+    return routes

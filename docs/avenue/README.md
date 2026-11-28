@@ -96,7 +96,7 @@ uv run python scripts/avenue/duel.py mastermind heuristic 200 advanced a.budget=
 src/avenue/
   game/      rules engine (no I/O): cards and board data, the Game state machine, JSON actions
   bots/      heuristic policy and evaluation, the Mastermind search bot
-  web/       room logic, FastAPI + WebSocket server, and the vanilla JS client in static/ (no build step)
+  web/       room logic, Starlette + WebSocket server, and the vanilla JS client in static/ (no build step)
   runner.py  bot-only games
   cli.py     the `avenue` command (serve, eval)
 scripts/     screenshots, browser click-through, animation frames, bot duels

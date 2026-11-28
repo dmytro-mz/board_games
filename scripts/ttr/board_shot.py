@@ -13,7 +13,8 @@ import time
 from pathlib import Path
 
 import uvicorn
-from fastapi.responses import HTMLResponse
+from starlette.responses import HTMLResponse
+from starlette.routing import Route
 
 from boardgames.testing import game_app
 
@@ -45,7 +46,7 @@ def main() -> None:
     ap.add_argument("--size", default="2000x1300")
     args = ap.parse_args()
     app = game_app("ttr")
-    app.add_api_route("/board", lambda: HTMLResponse(PAGE))
+    app.router.routes.insert(0, Route("/board", lambda request: HTMLResponse(PAGE)))
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=8766, log_level="warning"))
     threading.Thread(target=server.run, daemon=True).start()
     while not server.started:

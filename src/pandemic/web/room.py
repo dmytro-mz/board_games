@@ -558,15 +558,18 @@ class Room(Table):
             seat = (waiting + i) % game.n
             if seat in asked or not self._is_auto(seat):
                 continue
+            agent, view = self._agent(seat), self._bot_view(seat)
+            action = self.think(("react", self.game_no, self._step, seat), lambda a=agent, v=view: a.react(v))
             asked.add(seat)
-            action = self._agent(seat).react(self._bot_view(seat))
             if action is not None:
                 return seat, action
         return None
 
     def _planned(self, seat: int) -> Action:
         if self._next is None or self._next[:2] != (self._step, seat):
-            self._next = (self._step, seat, self._agent(seat).act(self._bot_view(seat)))
+            agent, view = self._agent(seat), self._bot_view(seat)
+            action = self.think(("act", self.game_no, self._step, seat), lambda: agent.act(view))
+            self._next = (self._step, seat, action)
         return self._next[2]
 
     def _auto_move(self, seat: int, action: Action) -> None:

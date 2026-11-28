@@ -1,8 +1,11 @@
-import { NAME_KEY, TOKEN_KEY, gameBase, leaveRoom, socketUrl } from "/static/shared/platform.js";
+import { frameLoop, gameBase, leaveRoom, NAME_KEY, socketUrl, TOKEN_KEY } from "/static/shared/platform.js";
 import { Board } from "./board.js";
 import { CARD_ORDER, COLOR_NAMES, PLAYER_FILL, cardBack, chip, paymentChips, richText, ticketBack, ticketCard, trainCard } from "./cards.js";
 import { copyText, h, openDialog, s, toast } from "/static/shared/dom.js";
 import { getVolume, isMuted, setMuted, setVolume, sfx, unlockAudio } from "./sound.js";
+
+// The turn timer only draws frames while a timer is running (`tickTimer`, kicked after every render).
+const kickTimer = frameLoop(tickTimer, () => S.timer.endAt && S.state?.status === "playing");
 
 const BASE = gameBase(import.meta.url); // /g/<key>/: this game's server routes
 
@@ -233,6 +236,7 @@ function applyState(next) {
     S.timer.endAt = performance.now() + g.time_left * 1000;
     S.timer.total = g.time_total;
   } else S.timer.endAt = 0;
+  kickTimer();
   const offerKey = g?.me?.offer?.join(",") || "";
   if (offerKey !== S.ui.offerKey) {
     S.ui.offerKey = offerKey;
@@ -760,6 +764,11 @@ function swatch(st, seat) {
 
 // ------------------------------------------------------------------ rendering
 function render(opts = {}) {
+  renderView(opts);
+  kickTimer();
+}
+
+function renderView(opts = {}) {
   renderTop();
   const st = S.state;
   const main = $("#main");
@@ -1618,9 +1627,7 @@ function tickTimer() {
       }
     } else bar.style.width = "0";
   }
-  requestAnimationFrame(tickTimer);
 }
-requestAnimationFrame(tickTimer);
 
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("input, textarea, select") || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1647,7 +1654,7 @@ async function boot() {
   const [config, map, land] = await Promise.all([
     fetch(`${BASE}api/config`).then((r) => r.json()),
     fetch(`${BASE}api/map`).then((r) => r.json()),
-    fetch(`${BASE}static/land.json`).then((r) => r.json()),
+    fetch(new URL("land.json", import.meta.url)).then((r) => r.json()),
   ]);
   S.config = config;
   S.map = map;
