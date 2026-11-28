@@ -35,6 +35,7 @@ module-name = [
     "phase10",
     "skyjo",
     "skyteam",
+    "toybattle",
     "ttr",
 ]
 

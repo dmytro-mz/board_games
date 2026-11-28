@@ -21,6 +21,7 @@ GAME_KEYS = (
     "skyjo",
     "phase10",
     "lostcities",
+    "toybattle",
     "avenue",
     "skyteam",
 )
