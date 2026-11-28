@@ -1,6 +1,6 @@
 # Board games — repo rules
 
-One server, one room for a group of friends, nine board games with bots (plus unfinished ones), played in the browser. The games were
+One server, one room for a group of friends, ten board games with bots (plus unfinished ones), played in the browser. The games were
 separate repos (`../agent_avenue`, `../karak`, `../skyjo`, …) and were combined here; those folders are the old
 originals and are not touched from this repo.
 
@@ -48,7 +48,7 @@ src/boardgames/          the platform (one package)
   static/                the room page (index.html, app.js, style.css, thumbs/<game>.jpg)
   static/shared/         modules games import: platform.js (identity, URLs, leaveRoom), dom.js (h/s/morph/toast/dialog)
 src/<game>/              one top-level package per game: avel avenue codenames karak lostcities pandemic phase10
-                         skyjo skyteam ttr. Inside: game/ (pure rules engine), bots/, web/room.py, web/spec.py,
+                         skyjo skyteam toybattle ttr. Inside: game/ (pure rules engine), bots/, web/room.py, web/spec.py,
                          web/static/ (vanilla JS client), cli.py (bot tools), plus game-specific bits (rl/, nn/…).
                          Each has its own CLAUDE.md with the game's invariants.
 tests/platform/          party + server tests     tests/<game>/   each game's tests (unchanged from its repo)
@@ -70,7 +70,7 @@ Inside a game the old layering holds: `game/` ← `bots/` ← `web/`; never impo
   `mounts()`, `routes(router)`, `on_connect`, `on_message`). Add the key to `games.GAME_KEYS` and a thumbnail at
   `src/boardgames/static/thumbs/<key>.jpg` (640 px wide screenshot of a running game).
 - The game's `Room` follows `games.GameRoom`: `join/connect/disconnect/handle/set_host/describe/drive/close`,
-  `status` ("lobby" while in its own lobby), `host_id`, `members` (with `.token`). Nine rooms get most of that
+  `status` ("lobby" while in its own lobby), `host_id`, `members` (with `.token`). Ten rooms get most of that
   from `boardgames.table.Table`; Sky Team implements it directly (it never had the shared skeleton).
 - The game's client lives at `/g/<key>/`: `index.html` loads `/g/<key>/static/…`; `app.js` computes
   `BASE = gameBase(import.meta.url)` and uses it for `api/…` and `ws/…`; identity comes from
