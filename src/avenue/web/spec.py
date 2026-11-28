@@ -31,6 +31,7 @@ GAME = GameSpec(
     bots=True,
     kind="versus",
     minutes="15–30",
+    weight=1.22,
     static=Path(__file__).parent / "static",
     backend=Backend,
     error=RoomError,

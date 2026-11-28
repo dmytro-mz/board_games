@@ -76,6 +76,7 @@ class GameSpec:
     backend: Callable[..., Backend]  # (delay_scale=..., **game options) -> Backend
     error: type[Exception]  # the game's RoomError: its message is shown to the player
     accent: str = "#888888"  # tile colour
+    weight: float = 0.0  # BoardGameGeek "weight" (complexity), 0–5
 
     def public(self) -> dict[str, Any]:
         return {
@@ -88,6 +89,7 @@ class GameSpec:
             "kind": self.kind,
             "minutes": self.minutes,
             "accent": self.accent,
+            "weight": self.weight,
         }
 
     def fits(self, people: int) -> bool:

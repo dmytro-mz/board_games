@@ -37,6 +37,7 @@ GAME = GameSpec(
     bots=False,
     kind="coop",
     minutes="15–20",
+    weight=2.04,
     static=Path(__file__).parent / "static",
     backend=Backend,
     error=RoomError,
