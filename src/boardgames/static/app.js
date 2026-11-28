@@ -369,6 +369,7 @@ function tile(g, voters, mine, st) {
         h("span", { class: `fact ${g.bots ? "bots" : "nobots"}` }, g.bots ? "🤖 Bots available" : "🙋 People only"),
         h("span", { class: "fact" }, KIND[g.kind] || g.kind),
         h("span", { class: "fact" }, "⏱ ", g.minutes, " min"),
+        g.weight ? h("span", { class: "fact", title: "BoardGameGeek weight (complexity), 0–5" }, "🧠 ", g.weight.toFixed(2), " / 5") : null,
       ),
       voters.length ? h("div", { class: "voters" }, voters.map((m) => h("span", { class: "avatar sm", title: m.name, "data-key": `v-${m.id}` }, initials(m.name)))) : null,
     ),
