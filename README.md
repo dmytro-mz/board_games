@@ -1,6 +1,6 @@
 # Game night
 
-Ten board games in one place, played in the browser with friends and bots. One person runs a small Python server;
+Eleven board games in one place, played in the browser with friends and bots. One person runs a small Python server;
 everyone else opens one link, votes for a game, and plays.
 
 | Game | Players | Bots | Kind |
@@ -13,6 +13,7 @@ everyone else opens one link, votes for a game, and plays.
 | Phase 10 | 2–6 | yes | competitive |
 | Lost Cities | 2 | yes | competitive |
 | Toy Battle | 2 | yes | competitive |
+| Marble Sumo | 2 | yes | competitive |
 | Agent Avenue | 2–4 | yes | competitive |
 | Sky Team | 2 | no | co-op |
 
