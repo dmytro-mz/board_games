@@ -22,6 +22,7 @@ GAME_TOOLS = {
     "lostcities": "Lost Cities: bot matches",
     "pandemic": "Pandemic: bot win rates",
     "phase10": "Phase 10: bot matches",
+    "sumo": "Marble Sumo: bot matches",
     "toybattle": "Toy Battle: bot matches and terrain balance",
     "skyjo": "Skyjo: strategies, tournaments and RL training",
     "ttr": "Ticket to Ride: Europe: bot matches",

@@ -16,7 +16,7 @@ src/boardgames/          the platform (one package)
   static/                the room page (index.html, app.js, style.css, thumbs/<game>.jpg)
   static/shared/         modules games import: platform.js (identity, URLs, leaveRoom), dom.js (h/s/morph/toast/dialog)
 src/<game>/              one top-level package per game: avenue codenames karak lostcities pandemic phase10
-                         skyjo skyteam toybattle ttr. Inside: game/ (pure rules engine), bots/, web/room.py, web/spec.py,
+                         skyjo skyteam sumo toybattle ttr. Inside: game/ (pure rules engine), bots/, web/room.py, web/spec.py,
                          web/static/ (vanilla JS client), cli.py (bot tools), plus game-specific bits (rl/, nn/…).
                          Each has its own CLAUDE.md with the game's invariants.
 tests/platform/          party + server tests     tests/<game>/   each game's tests
