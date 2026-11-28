@@ -10,14 +10,13 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from boardgames.games import GAME_KEYS, UNFINISHED_KEYS
+from boardgames.games import GAME_KEYS
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="Board games: the web server and the bots")
 console = Console()
 
 # Games that have their own commands (bot matches, training…), mounted as `bg <key> <command>`.
 GAME_TOOLS = {
-    "avel": "Chronicles of Avel: bot win rates",
     "avenue": "Agent Avenue: bot matches",
     "karak": "Karak: bot matches and AI training",
     "lostcities": "Lost Cities: bot matches",
@@ -37,9 +36,6 @@ def serve(
     port: int = 8000,
     public_url: Annotated[str | None, typer.Option(help="Base URL used in invite links")] = None,
     tunnel: Annotated[bool, typer.Option(help="Open a public cloudflared tunnel and invite through it")] = False,
-    unfinished: Annotated[
-        bool, typer.Option(help=f"Also offer games still in the works ({', '.join(UNFINISHED_KEYS)})")
-    ] = False,
     avenue_think: Annotated[float, typer.Option(help="Agent Avenue: max seconds the bot thinks per move")] = 1.0,
     codenames_pictures: Annotated[
         Path | None, typer.Option(help="Codenames: folder of your own images (20+), offered as an extra deck")
@@ -81,8 +77,7 @@ def serve(
         "skyjo": skyjo,
         "skyteam": {"progress": skyteam_progress},
     }
-    only = (*GAME_KEYS, *UNFINISHED_KEYS) if unfinished else None
-    web = create_app(public_url=public_url, lan_url=lan_url, game_options=options, only=only)
+    web = create_app(public_url=public_url, lan_url=lan_url, game_options=options)
     console.print("[bold yellow]Board games server[/]")
     console.print(f"  local:   http://localhost:{port}")
     if lan_url:
@@ -105,7 +100,7 @@ def _log_activity() -> None:
     """Rooms and tables log who joins, what starts and how it ends; print that on the console."""
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S"))
-    for name in ("boardgames", *GAME_KEYS, *UNFINISHED_KEYS):
+    for name in ("boardgames", *GAME_KEYS):
         logger = logging.getLogger(name)
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)

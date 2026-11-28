@@ -32,9 +32,6 @@ uv run bg serve --tunnel     # a public link for friends anywhere (needs `brew i
    lobby the leader can ask everyone to go back to the game selection; everyone else has to agree, or the leader
    goes back anyway.
 
-Chronicles of Avel (1–4, co-op, bots) is in the repo but not finished, so rooms don't offer it;
-`uv run bg serve --unfinished` adds it to the game selection.
-
 `uv run bg serve --help` lists all options (port, public URL, a few per-game ones). Rooms live in memory and close
 a few hours after everyone has left.
 

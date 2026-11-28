@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketTestSession
 
-from boardgames.games import GAME_KEYS, UNFINISHED_KEYS
+from boardgames.games import GAME_KEYS
 from boardgames.server import create_app
 
 TOKENS = ["a" * 32, "b" * 32]
@@ -42,14 +42,6 @@ def test_pages_and_config(client: TestClient) -> None:
         assert g["min_players"] <= g["max_players"]
         assert g["thumb"] is None or client.get(g["thumb"]).status_code == 200
     assert client.get("/api/rooms/NOPE1").status_code == 404
-
-
-def test_unfinished_games_are_not_offered(client: TestClient) -> None:
-    for key in UNFINISHED_KEYS:
-        assert client.get(f"/g/{key}/api/config").status_code == 404
-    with TestClient(create_app(delay_scale=0.0, only=[*GAME_KEYS, *UNFINISHED_KEYS])) as everything:
-        keys = [g["key"] for g in everything.get("/api/config").json()["games"]]
-        assert keys == [*GAME_KEYS, *UNFINISHED_KEYS]
 
 
 @pytest.mark.parametrize("key", GAME_KEYS)

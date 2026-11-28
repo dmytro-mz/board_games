@@ -25,9 +25,6 @@ GAME_KEYS = (
     "avenue",
     "skyteam",
 )
-# Games that are in the repo (code, tests, `bg <game>` tools) but not finished: not offered in rooms unless the
-# server runs with `bg serve --unfinished`.
-UNFINISHED_KEYS = ("avel",)
 
 
 class GameRoom(Protocol):
