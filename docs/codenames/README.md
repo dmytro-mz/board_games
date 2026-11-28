@@ -100,7 +100,7 @@ uv run python scripts/codenames/ui_check.py                                     
 ```
 src/codenames/
   game/      rules engine (pure, no I/O) and decks; data/ holds the word lists
-  web/       room logic, FastAPI + WebSocket server, and the vanilla JS client in static/ (no build step)
+  web/       room logic, Starlette + WebSocket server, and the vanilla JS client in static/ (no build step)
   cli.py     the `codenames` command
 scripts/     screenshots, the browser playthrough, and the picture-deck downloader
 tests/       pytest suite

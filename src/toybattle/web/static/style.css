@@ -369,9 +369,15 @@ aside.side { border-left: 3px solid #13102a; background: rgba(8, 6, 20, 0.45); d
 .bag-ico { width: calc(var(--tile) * 0.85); height: calc(var(--tile) * 0.85); }
 .bag-n { position: absolute; top: 2px; right: 2px; min-width: 22px; height: 22px; border-radius: 11px; background: #13102a; font-weight: 900; font-size: 0.8rem; display: grid; place-items: center; border: 2px solid rgba(255, 255, 255, 0.4); }
 .bag-label { font-weight: 900; font-size: 0.8rem; color: #3d2a00; background: var(--accent); border-radius: 8px; padding: 1px 8px; white-space: nowrap; }
-.bag.can-draw { cursor: pointer; border-color: var(--accent); background: rgba(255, 213, 74, 0.12); animation: glow 1.6s ease-in-out infinite; }
+.bag.can-draw { cursor: pointer; border-color: var(--accent); background: rgba(255, 213, 74, 0.12); }
 .bag.can-draw:hover { transform: translateY(-2px); }
-@keyframes glow { 50% { box-shadow: 0 0 16px rgba(255, 213, 74, 0.6); } }
+/* The glow fades in and out as opacity on its own layer: the compositor animates it, so a table waiting for the
+   player doesn't repaint the board every frame. */
+.bag.can-draw::after {
+  content: ""; position: absolute; inset: -2px; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 16px rgba(255, 213, 74, 0.6); opacity: 0; animation: bag-glow 1.6s ease-in-out infinite;
+}
+@keyframes bag-glow { 50% { opacity: 1; } }
 .rack { flex: 1; display: flex; flex-wrap: wrap; gap: calc(var(--tile) * 0.16); align-content: flex-start; min-height: var(--tile); padding: calc(var(--tile) * 0.12) 0 0 calc(var(--tile) * 0.1); min-width: 0; }
 .army.theirs .rack .troop { --size: calc(var(--tile) * 0.78); }
 .rack-slot {

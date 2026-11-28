@@ -10,7 +10,7 @@ strong bot that only knows what a human player would know, nice SVG animal art a
 ```
 avenue/game/     cards.py (board + card data), engine.py (Game state machine), actions.py (JSON protocol)
 avenue/bots/     heuristic.py (features, evaluation, fast policy), search.py (Mastermind: determinised MC)
-avenue/web/      room.py (sync table logic, no I/O), spec.py (its tile and backend on the platform; server: boardgames), static/ (vanilla JS)
+avenue/web/      room.py (sync table logic, no I/O; the Mastermind thinks in a worker process via `think_apart`), spec.py (its tile and backend on the platform; server: boardgames), static/ (vanilla JS)
 avenue/cli.py    `avenue serve` / `avenue eval`
 scripts/         demo.py, shot.py, ui_check.py, frames.py (browser checks), duel.py, fit_eval.py (bot work)
 ```

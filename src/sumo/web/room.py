@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from boardgames.table import MAX_NAME, Member, RoomError, Table, clean_text
+from boardgames.table import MAX_NAME, Member, RoomError, Table, clean_text, prewarm_bots, think_apart
 from sumo.bots import REGISTRY, Bot, SearchBot
 from sumo.game.board import DEFAULT_LAYOUT, LAYOUTS, public_board
 from sumo.game.engine import MARBLES, SIDE_NAMES, TO_WIN, BadAction, Event, Game, IllegalMove, Move
@@ -188,6 +188,7 @@ class Room(Table):
             n += 1
             name = f"{bot.label} {n}"
         self.seats.append(Seat(name=name, bot=key))
+        prewarm_bots()
         self._emit({"kind": "lobby"})
 
     def _remove_seat(self, seat: object) -> None:
@@ -392,7 +393,9 @@ class Room(Table):
             ready_at = max(self.busy_until, time.monotonic()) + self._bot_delay()
             view = game.view()
             try:
-                move = await asyncio.to_thread(self._agent(seat).act, view)
+                agent = self._agent(seat)
+                move, thought = await think_apart(agent, "act", view)
+                self._keep_agent(agent, thought)
             except Exception:
                 log.exception("room %s: bot failed", self.id)
                 self._crashed()

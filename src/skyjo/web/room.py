@@ -376,9 +376,11 @@ class Room(Table):
         self.pending = {}
         return True
 
-    def _auto_setup(self, seat: int) -> None:
+    def _auto_setup(self, seat: int, key: tuple[Any, ...] | None = None) -> None:
+        """`key`: the position this flip is planned for, so the bot may think off the event loop (`think`)."""
         obs, legal = self._setup_obs(seat)
-        action = self._agent(seat).act(obs, legal)
+        agent = self._agent(seat)
+        action = agent.act(obs, legal) if key is None else self.think(key, lambda: agent.act(obs, legal))
         self._queue_setup_flip(seat, action - FLIP_BASE)
 
     # ------------------------------------------------------------------ moves
@@ -404,8 +406,9 @@ class Room(Table):
 
     def _auto_move(self, seat: int) -> None:
         rnd = self._round()
-        action = self._agent(seat).act(rnd.observe(seat), rnd.legal_actions())
-        self._apply(seat, action)
+        agent, obs, legal = self._agent(seat), rnd.observe(seat), rnd.legal_actions()
+        key = ("move", self.game_no, rnd.round_index, rnd.turn, rnd.phase, seat)
+        self._apply(seat, self.think(key, lambda: agent.act(obs, legal)))
 
     def _apply(self, seat: int, action: int) -> None:
         game = self.game
@@ -521,8 +524,9 @@ class Room(Table):
             for seat in range(len(self.seats)):
                 left = self._setup_left(seat)
                 if left and self._is_auto(seat):
-                    delay = self._wait(("setup", *tag, seat, left), self._bot_delay(0.5))
-                    return delay, lambda s=seat: self._auto_setup(s)
+                    key = ("setup", *tag, seat, left)
+                    delay = self._wait(key, self._bot_delay(0.5))
+                    return delay, lambda s=seat, k=key: self._auto_setup(s, k)
         elif self._is_auto(rnd.current):
             base = 0.9 if rnd.phase == Phase.CHOOSE_SOURCE else 1.1
             delay = self._wait(("move", *tag, rnd.turn, rnd.phase), self._bot_delay(base))

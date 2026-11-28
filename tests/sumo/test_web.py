@@ -285,7 +285,7 @@ def test_http_config_and_rooms() -> None:
         code = client.post("/api/rooms").json()["room"]
         assert client.get(f"/api/rooms/{code}").json()["status"] == "lobby"
         page = client.get(f"/r/{code}")
-        assert page.status_code == 200 and "/g/sumo/static/app.js" in page.text
+        assert page.status_code == 200 and "/g/sumo/static/~" in page.text and "/app.js" in page.text
         for name in ("app.js", "board.js", "rules.js", "sound.js", "style.css"):
             assert client.get(f"/static/{name}").status_code == 200
 

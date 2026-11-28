@@ -138,7 +138,10 @@ class Check:
         ok = self.page.locator("#resolve:not(.hidden) #ok-btn")
         if await ok.count() and await ok.is_visible():
             await self.press(ok, "OK under the turn summary")  # on a phone it covers the map; a player reads it first
-        await self.page.evaluate("async (id) => (await import('/g/pandemic/static/board.js')).ensureVisible(id)", city)
+        await self.page.evaluate(
+            "async (id) => (await import(new URL('board.js', document.querySelector('script[type=module]').src).href)).ensureVisible(id)",
+            city,
+        )
         await self.press(self.page.locator(f'#map .city[data-id="{city}"] .node'), f"the {city} dot")
 
     async def open_city(self, city: str) -> None:

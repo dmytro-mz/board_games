@@ -14,7 +14,7 @@ sumo/game/       rules engine, pure Python, no I/O                              
 sumo/bots/       base.py (Bot, RandomBot) · search.py (SearchBot: alpha-beta) · REGISTRY / ALL / make_bot
 sumo/runner.py   play_game(bots, layout, move_limit)
 sumo/cli.py      `bg sumo eval -a yokozuna,ozeki -n 40 [-l classic,daisy] [--budget 0.5]`
-sumo/web/        room.py (sync table, bots think in a thread) · spec.py (tile + backend) · static/ (client)
+sumo/web/        room.py (sync table, bots think in a worker process) · spec.py (tile + backend) · static/ (client)
 ```
 
 ## Commands
@@ -50,7 +50,7 @@ sumo/web/        room.py (sync table, bots think in a thread) · spec.py (tile +
 
 ## Web
 
-- `Room` follows `boardgames.table.Table`, overrides `drive()` (bots think in a thread while browsers animate;
+- `Room` follows `boardgames.table.Table`, overrides `drive()` (bots think in a worker process (`think_apart`) while browsers animate;
   `busy_until` from the move animation) and has `step_bots()` for tests/scripts. `resign` is open to both seats.
 - Settings: `layout` (or "random"), `move_limit`, `turn_timer` (autopilot moves), `bot_speed`.
 - Client: `board.js` (geometry, SVG ring: earthen base, straw-rope border, clay floor, dimples; CSS marbles),

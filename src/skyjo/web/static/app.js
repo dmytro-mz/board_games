@@ -1,6 +1,9 @@
-import { NAME_KEY, TOKEN_KEY, gameBase, leaveRoom, socketUrl } from "/static/shared/platform.js";
+import { frameLoop, gameBase, leaveRoom, NAME_KEY, socketUrl, TOKEN_KEY } from "/static/shared/platform.js";
 import { copyText, h, openDialog, sleep, toast } from "./dom.js";
 import { isMuted, setMuted, sfx, unlockAudio } from "./sound.js";
+
+// The turn timer only draws frames while a timer is running (`tickTimer`, kicked after every render).
+const kickTimer = frameLoop(tickTimer, () => S.timer.endAt && S.state?.status === "playing");
 
 const BASE = gameBase(import.meta.url); // /g/<key>/: this game's server routes
 
@@ -302,6 +305,7 @@ function commit(state, ov = {}) {
     S.timer.endAt = performance.now() + g.time_left * 1000;
     S.timer.total = g.time_total;
   } else S.timer.endAt = 0;
+  kickTimer();
   render(ov);
 }
 
@@ -726,6 +730,11 @@ function scoreTable(st, { latest = false } = {}) {
 
 // ------------------------------------------------------------------ rendering
 function render(ov = {}) {
+  renderView(ov);
+  kickTimer();
+}
+
+function renderView(ov = {}) {
   renderTop();
   const st = S.state;
   const main = $("#main");
@@ -1348,9 +1357,7 @@ function tickTimer() {
       }
     } else bar.style.width = "0";
   }
-  requestAnimationFrame(tickTimer);
 }
-requestAnimationFrame(tickTimer);
 
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("input, textarea, select") || e.metaKey || e.ctrlKey || e.altKey) return;

@@ -1,10 +1,13 @@
-import { NAME_KEY, TOKEN_KEY, gameBase, leaveRoom, socketUrl } from "/static/shared/platform.js";
+import { frameLoop, gameBase, leaveRoom, NAME_KEY, socketUrl, TOKEN_KEY } from "/static/shared/platform.js";
 import { meepleSvg } from "./art.js";
 import { Board } from "./board.js";
 import { AGENTS, AGENT_ORDER, MARKET, agentCard, cardBack, iconSvg, marketBack, marketCard, richText } from "./cards.js";
 import { copyText, h, openDialog, toast } from "/static/shared/dom.js";
 import { showRules } from "./rules.js";
 import { getVolume, isMuted, setMuted, setVolume, sfx, unlockAudio } from "./sound.js";
+
+// The turn timer only draws frames while a timer is running (`tickTimer`, kicked after every render).
+const kickTimer = frameLoop(tickTimer, () => S.timer.endAt && S.state?.status === "playing");
 
 const BASE = gameBase(import.meta.url); // /g/<key>/: this game's server routes
 
@@ -238,6 +241,7 @@ function applyState(next, instant = false) {
     S.timer.endAt = performance.now() + g.time_left * 1000;
     S.timer.total = g.time_total;
   } else S.timer.endAt = 0;
+  kickTimer();
   // joining (or coming back to) a table whose game is over: show the result
   if (next.status === "game_over" && (!prev || prev.status === "lobby")) S.ui.overShown = true;
   if (next.event?.kind === "game_start" || (g && S.gameNo !== null && prev?.game?.turn > (g?.turn ?? 0))) {
@@ -545,6 +549,11 @@ function askName(title, dismissable = false) {
 
 // ------------------------------------------------------------------ rendering
 function render() {
+  renderView();
+  kickTimer();
+}
+
+function renderView() {
   renderTop();
   const st = S.state;
   const main = $("#main");
@@ -1690,9 +1699,7 @@ function tickTimer() {
       }
     } else bar.style.width = "0";
   }
-  requestAnimationFrame(tickTimer);
 }
-requestAnimationFrame(tickTimer);
 
 // ------------------------------------------------------------------ boot
 async function boot() {

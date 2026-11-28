@@ -15,7 +15,7 @@ pandemic/game/      rules engine, pure Python, no I/O                  (lowest l
   engine.py         Game state machine: Game.play(seat, action) -> events, undo, view(seat) -> View, sandbox
 pandemic/bots/      Bot ABC (act / react) · planner.py (beam-search turn planner) · registry (rookie, expert)
 pandemic/runner.py  play_game(bots, seed, rules)
-pandemic/web/       room.py (sync table logic, no I/O) · server.py (FastAPI + WebSocket, /api/config)
+pandemic/web/       room.py (sync table logic, no I/O) · spec.py (its tile and backend on the platform; server: boardgames)
                     static/ (vanilla ES-module client, no build step)
 pandemic/cli.py     typer CLI (entry point `pandemic`: serve, eval)
 scripts/            build_map (map-data.js from Natural Earth) · demo / shot / sizes / ui_check / flow_check / glitch_check (browser checks)
@@ -82,7 +82,8 @@ scripts/            build_map (map-data.js from Natural Earth) · demo / shot / 
   animations. `_sees(viewer, seat)` decides hands; `_filter_event` blanks other players' drawn cards and Forecast
   cards when hands are closed. `turn_end` (events since the current draw) lets a reload rebuild the resolve panel.
 - Bots, the autopilot and out-of-turn bot events run from `Room.plan()` → `(delay, step)`, driven by
-  `Room.drive()`. Pauses before Continue are longer while a human holds a playable event (those don't follow
+  `Room.drive()`. The planner's `act`/`react` go through `Table.think(key, ...)`: under `drive()` they run in a worker
+  thread (a turn plan takes 100–500 ms and would stall every room), called directly (tests) they run inline. Pauses before Continue are longer while a human holds a playable event (those don't follow
   `bot_speed`, which scales the rest). A `hold` request (sent when a player opens an event card) pauses all bots
   for up to `HOLD_MAX` seconds, once per seat per game step, only for seats that hold an event; it ends when the
   game moves on or the card is put back.

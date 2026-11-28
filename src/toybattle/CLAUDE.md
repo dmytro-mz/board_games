@@ -13,7 +13,7 @@ toybattle/game/       rules engine, pure Python, no I/O                         
 toybattle/bots/       Bot ABC · evaluate.py (static evaluation, immediate wins/threats) · general.py (search) · REGISTRY
 toybattle/runner.py   play_game(bots, terrain, special, seed)
 toybattle/cli.py      `bg toybattle eval` (bot vs bot per terrain: win rates, colour/starter balance, how games end)
-toybattle/web/        room.py (sync table logic, bots think in a thread) · spec.py (tile + backend) · static/ (client)
+toybattle/web/        room.py (sync table logic, bots think in a worker process) · spec.py (tile + backend) · static/ (client)
 ```
 
 ## Commands
@@ -81,11 +81,11 @@ symmetric boards are point-symmetric with equal objectives.
   objective reachable with one placement) ±0.9 WIN; an immediate threat of the other side that no single placement
   (cover, block, Slingshot knock) parries −0.85 WIN; else medals, region potential, connected / reachable bases,
   H.Q. guards, path cost to the enemy H.Q., rack and reserve. Antisymmetric (tested).
-- The room gives it a thinking budget (`Room.bot_budget`, 1.2 s by default) and runs it in a worker thread.
+- The room gives it a thinking budget (`Room.bot_budget`, 1.2 s by default) and runs it in a worker process (`boardgames.table.think_apart`: its own core, the event loop stays free).
 
 ## Web
 
-- `Room` (sync, no I/O) follows `boardgames.table.Table`, but overrides `drive()` (bots think in a thread while
+- `Room` (sync, no I/O) follows `boardgames.table.Table`, but overrides `drive()` (bots think in a worker process while
   browsers animate; `busy_until` from the animated events) and has `step_bots()` for tests/scripts.
 - Settings: `terrain` (key or "random", picked at the top of the lobby), `special` (special bases on/off),
   `turn_timer` (autopilot finishes the turn), `bot_speed`. No hints, no undo (the owner asked for no player help).

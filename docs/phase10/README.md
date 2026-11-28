@@ -122,7 +122,7 @@ popovers, hitting, dragging cards to reorder the hand, sorting and pressing Read
 src/phase10/
   game/      pure rules engine (no I/O): cards and phases, group validation, actions, the Game state machine
   bots/      Bot interface, the phase solver, the planner bot and its three levels
-  web/       room logic, FastAPI + WebSocket server, and the vanilla JS client in static/ (no build step)
+  web/       room logic, Starlette + WebSocket server, and the vanilla JS client in static/ (no build step)
   runner.py  play a bot-only game
   cli.py     the `phase10` command (serve, eval)
 scripts/     screenshots and browser checks

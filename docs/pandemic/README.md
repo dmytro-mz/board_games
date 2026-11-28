@@ -127,7 +127,7 @@ players playing to the end with taps and clicks, reloads mid-game, and play agai
 src/pandemic/
   game/      pure rules engine (no I/O): map, cards and roles, actions, the Game state machine
   bots/      Bot interface and the planner bot with its two levels
-  web/       room logic, FastAPI + WebSocket server, and the vanilla JS client in static/ (no build step)
+  web/       room logic, Starlette + WebSocket server, and the vanilla JS client in static/ (no build step)
   runner.py  play a bot-only game
   cli.py     the `pandemic` command (serve, eval)
 scripts/     map builder, screenshots and browser checks

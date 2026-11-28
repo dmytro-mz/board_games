@@ -1,8 +1,11 @@
-import { NAME_KEY, TOKEN_KEY, gameBase, leaveRoom, socketUrl } from "/static/shared/platform.js";
+import { frameLoop, gameBase, leaveRoom, NAME_KEY, socketUrl, TOKEN_KEY } from "/static/shared/platform.js";
 import { copyText, h, morph, openDialog, toast } from "/static/shared/dom.js";
 import { BH, BW, boardSvg, cellName, installDefs, marble, neighbour, pct, screenAngle, setBoard, xy } from "./board.js";
 import { showRules } from "./rules.js";
 import { getVolume, isMuted, setMuted, setVolume, sfx, unlockAudio } from "./sound.js";
+
+// The turn timer only draws frames while a timer is running (`tickTimer`, kicked after every render).
+const kickTimer = frameLoop(tickTimer, () => S.timer.endAt && S.state?.status === "playing");
 
 const BASE = gameBase(import.meta.url); // /g/<key>/: this game's server routes
 const MAX_SEATS = 2;
@@ -195,6 +198,7 @@ function applyState(next) {
     S.timer.endAt = performance.now() + g.time_left * 1000;
     S.timer.total = g.time_total;
   } else S.timer.endAt = 0;
+  kickTimer();
   const outMove = events.find((e) => e.kind === "move" && e.out != null);
   if (next.status !== prev?.status) {
     S.ui.summaryHidden = false;
@@ -568,6 +572,11 @@ function askName(title, dismissable = false) {
 
 // ------------------------------------------------------------------ render
 function render() {
+  renderView();
+  kickTimer();
+}
+
+function renderView() {
   renderTop();
   const st = S.state;
   const main = $("#main");
@@ -1197,9 +1206,7 @@ function tickTimer() {
       }
     } else bar.style.width = "0";
   }
-  requestAnimationFrame(tickTimer);
 }
-requestAnimationFrame(tickTimer);
 
 // ------------------------------------------------------------------ boot
 async function boot() {

@@ -11,20 +11,29 @@ Hooks a game provides:
   plan()                  the next automatic step for `drive()`: (seconds to wait, step) or None
   state_for(member_id, event), _to_lobby()
 
-Everything here is synchronous and runs on the event loop thread, like the rest of a room.
+Everything here is synchronous and runs on the event loop thread, like the rest of a room. The one exception is a
+bot's thinking: `think(key, compute)` inside `plan()` or a step runs `compute` in a worker thread when the room is
+driven by `drive()`, so a slow bot never stalls the other rooms (called directly, e.g. in tests, it computes inline).
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import multiprocessing
+import os
 import random
 import secrets
 import time
 from collections import deque
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from typing import Any, Protocol
+
+from boardgames import worker
 
 MAX_NAME = 20
 MAX_CHAT = 240
@@ -32,6 +41,86 @@ CHAT_INTERVAL = 0.4
 REACTIONS = ("👍", "😂", "😱", "😡", "🎉", "🤔", "😭", "🔥", "👏", "🙈")
 
 Plan = tuple[float, Callable[[], None]]
+
+
+class _Pending(Exception):
+    """`think` needs `compute()` run off the event loop before the step can go on."""
+
+    def __init__(self, key: tuple[Any, ...], compute: Callable[[], Any]) -> None:
+        self.key = key
+        self.compute = compute
+
+
+# ---------------------------------------------------------------------- bots that think for whole seconds
+# Search bots with a time budget (Avenue, Sumo, Toy Battle) burn a full core for a second or more per move. In a
+# thread they hold the GIL against the event loop, so every message of every room waits (tens of ms per message,
+# measured) and several of them share one core, each searching less. In a worker process each gets its own core and
+# the loop stays free; the bot object travels both ways, so its random generator continues exactly as in-process.
+POOL_IDLE = 120.0  # seconds without bot work before the worker processes exit (they come back on demand)
+_pool: ProcessPoolExecutor | None = None
+_pool_busy = 0
+_pool_last = 0.0
+_warming: Any = None  # the prewarm task's future while the first worker boots
+_pool_log = logging.getLogger("boardgames.table")
+
+
+def _pool_get() -> ProcessPoolExecutor:
+    global _pool
+    if _pool is None:
+        workers = max(1, min(8, (os.cpu_count() or 2) - 1))
+        _pool = ProcessPoolExecutor(
+            workers,
+            mp_context=multiprocessing.get_context("spawn"),  # a clean interpreter: no forked event loop or sockets
+            initializer=worker.watch_owner,
+            initargs=(os.getpid(),),
+        )
+    return _pool
+
+
+def shutdown_bots() -> None:
+    """Stop the worker processes (the server is shutting down)."""
+    global _pool
+    if _pool is not None:
+        _pool.shutdown(wait=False, cancel_futures=True)
+        _pool = None
+
+
+def _pool_idle_check() -> None:
+    if _pool is not None and _pool_busy == 0 and time.monotonic() - _pool_last >= POOL_IDLE:
+        shutdown_bots()
+
+
+async def think_apart(agent: Any, method: str, *args: Any) -> tuple[Any, Any]:
+    """`agent.<method>(*args)` in a worker process. Returns (result, the agent as it is after thinking): the room
+    keeps that copy in place of the original (`Table._keep_agent`). Falls back to a thread if processes fail."""
+    global _pool, _pool_busy, _pool_last
+    loop = asyncio.get_running_loop()
+    _pool_busy += 1
+    try:
+        if _warming is not None and not _warming.done():  # reuse the worker that is booting, don't start a second
+            with contextlib.suppress(Exception):
+                await asyncio.wrap_future(_warming)
+        try:
+            return await loop.run_in_executor(_pool_get(), worker.decide, agent, method, args)
+        except (BrokenProcessPool, OSError, RuntimeError) as e:
+            _pool_log.warning("bot worker processes failed (%s); thinking in a thread", e)
+            _pool = None
+            return await asyncio.to_thread(worker.decide, agent, method, args)
+    finally:
+        _pool_busy -= 1
+        _pool_last = time.monotonic()
+        loop.call_later(POOL_IDLE + 1, _pool_idle_check)
+
+
+def prewarm_bots() -> None:
+    """A search bot just sat down: start a worker now, so the game's first move doesn't wait for one."""
+    global _pool_last, _warming
+    if _pool is None:
+        with contextlib.suppress(Exception):
+            _warming = _pool_get().submit(worker.ready)
+            _pool_last = time.monotonic()
+            with contextlib.suppress(RuntimeError):
+                asyncio.get_running_loop().call_later(POOL_IDLE + 1, _pool_idle_check)
 
 
 class RoomError(Exception):
@@ -80,6 +169,8 @@ class Table:
         self._wake = asyncio.Event()
         self._due: tuple[tuple[Any, ...], float] | None = None
         self._deadline: tuple[tuple[Any, ...], float] | None = None
+        self._offload = False  # inside drive(): think() hands its work to a worker thread
+        self._thought: tuple[tuple[Any, ...], Any] | None = None
         self._log = logging.getLogger(type(self).__module__)  # logs under the game's own name
 
     # ------------------------------------------------------------------ hooks
@@ -201,11 +292,45 @@ class Table:
             self._due = (key, now + delay * self.delay_scale)
         return max(0.0, self._due[1] - now)
 
+    def think(self, key: tuple[Any, ...], compute: Callable[[], Any]) -> Any:
+        """A bot's decision for the game position `key` (the same key always means the same position and seat).
+
+        `compute` must only read what it closed over: build the bot's view before, on the loop. Under `drive()` it
+        runs in a worker thread and the driver plans again; the step that asked gets the result when it runs again
+        for the same key. Code before `think` in a step must therefore have no side effects."""
+        if self._thought is not None and self._thought[0] == key:
+            result = self._thought[1]
+            self._thought = None
+            return result
+        if self._offload:
+            raise _Pending(key, compute)
+        return compute()
+
+    async def _think(self, pending: _Pending) -> None:
+        try:
+            result = await asyncio.to_thread(pending.compute)
+        except Exception:
+            self._log.exception("room %s: a bot failed to think", self.id)
+            self._crashed()
+            return
+        self._thought = (pending.key, result)
+
+    def _run(self, fn: Callable[[], Any]) -> Any:
+        self._offload = True
+        try:
+            return fn()
+        finally:
+            self._offload = False
+
     async def drive(self) -> None:
         """Run bot moves, timeouts and round transitions (`plan()`) until the room is closed."""
         while not self.closed:
             self._wake.clear()
-            plan = self.plan()
+            try:
+                plan = self._run(self.plan)
+            except _Pending as pending:
+                await self._think(pending)
+                continue
             if plan is None:
                 await self._wake.wait()
                 continue
@@ -217,11 +342,25 @@ class Table:
                 except TimeoutError:
                     pass
             try:
-                step()
+                self._run(step)
+            except _Pending as pending:
+                await self._think(pending)
+                continue
             except Exception:
                 self._log.exception("room %s: automatic step failed", self.id)
                 self._crashed()
             await asyncio.sleep(0)
+
+    def _keep_agent(self, old: Any, new: Any) -> None:
+        """A bot that thought in a worker process comes back as a copy (`think_apart`): keep it where the original
+        was (a seat, or the autopilot)."""
+        if new is old:
+            return
+        for seat in self.seats:
+            if getattr(seat, "agent", None) is old:
+                seat.agent = new
+        if getattr(self, "_autopilot", None) is old:
+            self._autopilot = new
 
     def _crashed(self) -> None:
         self._say("⚠️ A bot crashed; the game is back in the lobby")

@@ -101,7 +101,7 @@ uv run python scripts/ttr/ui_check.py                                 # click th
 src/ttr/
   game/      pure rules engine (no I/O): map data, rules helpers, actions, the Game state machine
   bots/      Bot interface, route planner, and the Rookie / Conductor / Expert bots
-  web/       room logic, FastAPI + WebSocket server, and the vanilla JS client in static/ (no build step)
+  web/       room logic, Starlette + WebSocket server, and the vanilla JS client in static/ (no build step)
   runner.py  play a bot-only game
   cli.py     the `ttr` command (serve, eval)
 scripts/     map tracing from the board photo, plus screenshot and browser checks

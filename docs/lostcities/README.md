@@ -99,7 +99,7 @@ uv run python scripts/lostcities/ui_check.py                                 # c
 src/lostcities/
   game/      pure rules engine (no I/O): cards, scoring, actions, the Game state machine
   bots/      Bot interface, the heuristic player and the bot registry
-  web/       room logic, FastAPI + WebSocket server, and the vanilla JS client in static/ (no build step)
+  web/       room logic, Starlette + WebSocket server, and the vanilla JS client in static/ (no build step)
   runner.py  play a bot-only match
   cli.py     the `lostcities` command (serve, eval)
 scripts/     screenshots and browser checks
